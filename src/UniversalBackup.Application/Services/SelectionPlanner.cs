@@ -133,11 +133,11 @@ public sealed class SelectionPlanner : ISelectionPlanner
         }
 
         // =========================================================================
-        // TIER 1: Explicit User Overrides (Most specific explicit rule wins)
+        // TIER 1: Explicit User Overrides (Exact match on path)
         // =========================================================================
         var matchingExplicitRules = plan.Rules
             .Where(r => r.Precedence == SelectionPrecedence.ExplicitUserOverride || r.IsUserOverride)
-            .Where(r => MatchesPath(normalizedPath, r.PathOrPattern, _platformComparison))
+            .Where(r => string.Equals(normalizedPath, SourceRoot.NormalizePath(r.PathOrPattern), _platformComparison))
             .OrderByDescending(r => r.Specificity)
             .ThenByDescending(r => r.PathOrPattern.Length)
             .ToList();
