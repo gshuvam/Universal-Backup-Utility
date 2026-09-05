@@ -22,7 +22,10 @@ public static class DiscoveryProviderRegistry
             new RegistryGameDiscoveryProvider(),
             new LinuxGamePlatformDiscoveryProvider(),
             new TargetedGamesDiscoveryProvider(),
-            new LudusaviDiscoveryProvider()
+            new LudusaviDiscoveryProvider(),
+            new BrowserProfileDiscoveryProvider(),
+            new DesktopSettingsDiscoveryProvider(),
+            new DocumentAndMediaClassifierProvider()
         ];
     }
 }
