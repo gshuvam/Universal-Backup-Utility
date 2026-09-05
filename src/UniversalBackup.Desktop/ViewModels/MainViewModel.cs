@@ -1,104 +1,196 @@
-using System.Diagnostics;
-using Avalonia.Controls;
-using Avalonia.Controls.Models.TreeDataGrid;
+using System;
+using System.Collections.ObjectModel;
+using Avalonia;
+using Avalonia.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using UniversalBackup.Domain.Models;
-using UniversalBackup.Domain.Services;
+using UniversalBackup.Application.Common.Interfaces;
+using UniversalBackup.Desktop.Models;
+using UniversalBackup.Desktop.Services;
 
 namespace UniversalBackup.Desktop.ViewModels;
 
+/// <summary>
+/// Root view model orchestrating top-level desktop shell navigation, status, and theming.
+/// </summary>
 public partial class MainViewModel : ViewModelBase
 {
-    [ObservableProperty]
-    private HierarchicalTreeDataGridSource<TreeNodeItem>? _treeSource;
+    private readonly INavigationService _navigationService;
+    private readonly IThemeService _themeService;
+    private readonly IWindowsPrivilegeService _privilegeService;
 
     [ObservableProperty]
-    private string _statusMessage = "Ready. Click 'Load 250,000 Nodes' to benchmark virtualization.";
+    private ObservableCollection<NavigationItemModel> _navigationItems = [];
 
     [ObservableProperty]
-    private int _totalNodesCount;
+    private NavigationItemModel? _selectedNavigationItem;
 
     [ObservableProperty]
-    private string _memoryUsageMb = "0.0 MB";
+    private ViewModelBase? _currentView;
 
     [ObservableProperty]
-    private string _generationTime = "0 ms";
+    private NavigationSection _currentSection = NavigationSection.Overview;
+
+    [ObservableProperty]
+    private string _currentPageTitle = "Overview";
+
+    [ObservableProperty]
+    private string _currentPageSubtitle = "System snapshot status and health telemetry";
+
+    [ObservableProperty]
+    private string _statusMessage = "Ready. Engine and catalog online.";
+
+    [ObservableProperty]
+    private string _engineStatusText = "restic: Ready • sqlite: WAL";
+
+    [ObservableProperty]
+    private string _privilegeStatusText = "VSS: Available";
+
+    [ObservableProperty]
+    private bool _isPrivileged;
 
     [ObservableProperty]
     private bool _isBusy;
 
-    private List<TreeNodeItem> _rootNodes = [];
+    [ObservableProperty]
+    private AppTheme _currentTheme = AppTheme.System;
 
-    [RelayCommand]
-    public async Task LoadTreeAsync()
+    public MainViewModel(
+        INavigationService navigationService,
+        IThemeService themeService,
+        IWindowsPrivilegeService privilegeService)
     {
-        IsBusy = true;
-        StatusMessage = "Generating 250,000 synthetic nodes asynchronously in background...";
+        _navigationService = navigationService ?? throw new ArgumentNullException(nameof(navigationService));
+        _themeService = themeService ?? throw new ArgumentNullException(nameof(themeService));
+        _privilegeService = privilegeService ?? throw new ArgumentNullException(nameof(privilegeService));
 
-        long memBefore = GC.GetTotalMemory(true);
-        var sw = Stopwatch.StartNew();
+        InitializeNavigationItems();
 
-        const int targetCount = 250_000;
-        var nodes = await Task.Run(() => SyntheticTreeGenerator.GenerateTree(targetCount));
+        _isPrivileged = _privilegeService.IsRunningAsAdministrator();
+        PrivilegeStatusText = _isPrivileged ? "Elevated (Admin / VSS)" : "Standard User (VSS via IPC)";
 
-        sw.Stop();
-        long memAfter = GC.GetTotalMemory(false);
+        _currentTheme = _themeService.CurrentTheme;
+        _themeService.ThemeChanged += (_, theme) => CurrentTheme = theme;
 
-        _rootNodes = nodes;
-        TotalNodesCount = SyntheticTreeGenerator.CountNodes(nodes);
-        GenerationTime = $"{sw.ElapsedMilliseconds} ms";
-        MemoryUsageMb = $"{(memAfter - memBefore) / (1024.0 * 1024.0):F1} MB";
+        _navigationService.NavigationChanged += (_, section) => OnNavigationSectionChanged(section);
 
-        var source = new HierarchicalTreeDataGridSource<TreeNodeItem>(_rootNodes)
-        {
-            Columns =
+        // Start at Overview
+        _navigationService.NavigateTo(NavigationSection.Overview);
+    }
+
+    private void InitializeNavigationItems()
+    {
+        NavigationItems =
+        [
+            new NavigationItemModel
             {
-                new HierarchicalExpanderColumn<TreeNodeItem>(
-                    new CheckBoxColumn<TreeNodeItem>(
-                        "Select",
-                        x => x.IsChecked,
-                        (item, val) => item.SetChecked(val, cascadeDown: true, bubbleUp: true)),
-                    x => x.Children,
-                    x => x.HasChildren,
-                    x => x.IsExpanded),
-                new TextColumn<TreeNodeItem, string>("Name", x => x.Name, new GridLength(260, GridUnitType.Pixel)),
-                new TextColumn<TreeNodeItem, string>("Size", x => x.FormattedSize, new GridLength(110, GridUnitType.Pixel)),
-                new TextColumn<TreeNodeItem, string>("Type", x => x.IsFolder ? "Directory" : "File", new GridLength(90, GridUnitType.Pixel)),
-                new TextColumn<TreeNodeItem, string>("Path", x => x.Path, new GridLength(1, GridUnitType.Star))
+                Section = NavigationSection.Overview,
+                Title = "Overview",
+                Tooltip = "Dashboard, overall health, and backup telemetry",
+                IconGeometry = GetIconGeometry("NavIconOverview")
+            },
+            new NavigationItemModel
+            {
+                Section = NavigationSection.Backup,
+                Title = "Back up",
+                Tooltip = "Configure sources, browse items, and execute backup",
+                IconGeometry = GetIconGeometry("NavIconBackup")
+            },
+            new NavigationItemModel
+            {
+                Section = NavigationSection.Restore,
+                Title = "Restore",
+                Tooltip = "Inspect snapshots, restore files, and resolve conflicts",
+                IconGeometry = GetIconGeometry("NavIconRestore")
+            },
+            new NavigationItemModel
+            {
+                Section = NavigationSection.BackupPlans,
+                Title = "Backup plans",
+                Tooltip = "Manage automated schedules and retention policies",
+                IconGeometry = GetIconGeometry("NavIconPlans")
+            },
+            new NavigationItemModel
+            {
+                Section = NavigationSection.Destinations,
+                Title = "Destinations",
+                Tooltip = "Manage local repositories and cloud replication endpoints",
+                IconGeometry = GetIconGeometry("NavIconDestinations")
+            },
+            new NavigationItemModel
+            {
+                Section = NavigationSection.Activity,
+                Title = "Activity",
+                Tooltip = "Audit log, job execution history, and verification drills",
+                IconGeometry = GetIconGeometry("NavIconActivity")
+            },
+            new NavigationItemModel
+            {
+                Section = NavigationSection.Settings,
+                Title = "Settings",
+                Tooltip = "Application preferences, theme variant, and engine setup",
+                IconGeometry = GetIconGeometry("NavIconSettings")
             }
+        ];
+    }
+
+    private static Geometry? GetIconGeometry(string resourceKey)
+    {
+        if (Avalonia.Application.Current?.Resources.TryGetResource(resourceKey, null, out var res) == true
+            && res is Geometry geom)
+        {
+            return geom;
+        }
+
+        return null;
+    }
+
+    private void OnNavigationSectionChanged(NavigationSection section)
+    {
+        CurrentSection = section;
+        CurrentView = _navigationService.CurrentViewModel;
+
+        foreach (var item in NavigationItems)
+        {
+            item.IsSelected = item.Section == section;
+            if (item.IsSelected)
+            {
+                SelectedNavigationItem = item;
+            }
+        }
+
+        (CurrentPageTitle, CurrentPageSubtitle) = section switch
+        {
+            NavigationSection.Overview => ("Overview", "System snapshot status and health telemetry"),
+            NavigationSection.Backup => ("Back up", "Configure source items, filters, and run backup"),
+            NavigationSection.Restore => ("Restore", "Browse historical snapshots and safely restore data"),
+            NavigationSection.BackupPlans => ("Backup plans", "Configure automated schedules and retention rules"),
+            NavigationSection.Destinations => ("Destinations", "Manage local storage, drives, and cloud accounts"),
+            NavigationSection.Activity => ("Activity", "Audit journal, job history, and verification drills"),
+            NavigationSection.Settings => ("Settings", "Preferences, theme, engine binaries, and performance"),
+            _ => ("Universal Backup", "Modern Cross-Platform Backup Engine")
         };
-
-        TreeSource = source;
-        IsBusy = false;
-        StatusMessage = $"Virtualized {TotalNodesCount:N0} nodes in {GenerationTime}. Memory: {MemoryUsageMb}. Tri-state bubbling ready.";
     }
 
     [RelayCommand]
-    public void SelectAll()
+    public void Navigate(NavigationSection section)
     {
-        foreach (var root in _rootNodes)
+        _navigationService.NavigateTo(section);
+    }
+
+    [RelayCommand]
+    public void SelectNavigationItem(NavigationItemModel item)
+    {
+        if (item != null)
         {
-            root.IsChecked = true;
+            _navigationService.NavigateTo(item.Section);
         }
     }
 
     [RelayCommand]
-    public void ClearSelection()
+    public void ToggleTheme()
     {
-        foreach (var root in _rootNodes)
-        {
-            root.IsChecked = false;
-        }
-    }
-
-    [RelayCommand]
-    public void ExpandLevel1()
-    {
-        foreach (var root in _rootNodes)
-        {
-            root.IsExpanded = true;
-        }
+        _themeService.ToggleTheme();
+        CurrentTheme = _themeService.CurrentTheme;
     }
 }
-

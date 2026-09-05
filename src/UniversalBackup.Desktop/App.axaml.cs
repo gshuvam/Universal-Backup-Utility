@@ -1,6 +1,9 @@
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
+using CommunityToolkit.Mvvm.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection;
+using UniversalBackup.Desktop.Services;
 using UniversalBackup.Desktop.ViewModels;
 using UniversalBackup.Desktop.Views;
 
@@ -15,11 +18,17 @@ public partial class App : Avalonia.Application
 
     public override void OnFrameworkInitializationCompleted()
     {
+        var services = new ServiceCollection();
+        ServiceConfiguration.ConfigureServices(services);
+        var provider = services.BuildServiceProvider();
+
+        Ioc.Default.ConfigureServices(provider);
+
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             desktop.MainWindow = new MainWindow
             {
-                DataContext = new MainViewModel(),
+                DataContext = provider.GetRequiredService<MainViewModel>(),
             };
         }
 

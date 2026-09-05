@@ -1,156 +1,252 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:UniversalBackup.Desktop.ViewModels"
+        xmlns:models="using:UniversalBackup.Desktop.Models"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        mc:Ignorable="d" d:DesignWidth="1100" d:DesignHeight="700"
-        Width="1100" Height="700"
-        MinWidth="900" MinHeight="600"
+        mc:Ignorable="d" d:DesignWidth="1180" d:DesignHeight="760"
+        Width="1180" Height="760"
+        MinWidth="980" MinHeight="620"
         WindowStartupLocation="CenterScreen"
         x:Class="UniversalBackup.Desktop.Views.MainWindow"
         x:DataType="vm:MainViewModel"
         Icon="/Assets/avalonia-logo.ico"
-        Title="Universal Backup Utility — TreeDataGrid Virtualization Spike (250,000 Nodes)">
+        Title="Universal Backup Utility">
 
-    <Design.DataContext>
-        <vm:MainViewModel />
-    </Design.DataContext>
+    <Grid ColumnDefinitions="250,*">
 
-    <Grid RowDefinitions="Auto,Auto,*,Auto" Margin="24">
-        <!-- 1. Header & Telemetry Metrics Section -->
-        <Border Grid.Row="0"
-                Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
+        <!-- ================================================================= -->
+        <!-- 1. Permanent Left Navigation Rail                                  -->
+        <!-- ================================================================= -->
+        <Border Grid.Column="0"
+                Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"
                 BorderBrush="{DynamicResource SystemControlTransientBorderBrush}"
-                BorderThickness="1"
-                CornerRadius="8"
-                Padding="16"
-                Margin="0,0,0,16">
-            <Grid ColumnDefinitions="*,Auto">
-                <StackPanel Orientation="Vertical" Spacing="4">
-                    <TextBlock Text="Universal Backup Utility"
-                               FontSize="20"
-                               FontWeight="Bold"
-                               Foreground="{DynamicResource SystemControlHighlightAccentBrush}" />
-                    <TextBlock Text="Phase 0 Feasibility Spike: 250,000 Nodes Virtualization &amp; Tri-State Checkbox Bubbling"
-                               FontSize="13"
-                               Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
-                </StackPanel>
+                BorderThickness="0,0,1,0">
+            <Grid RowDefinitions="Auto,*,Auto">
 
-                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
-                    <!-- Metric Badge 1: Node Count -->
-                    <Border Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"
-                            CornerRadius="6"
-                            Padding="12,6">
-                        <StackPanel Orientation="Horizontal" Spacing="6">
-                            <TextBlock Text="Total Nodes:" FontSize="12" FontWeight="SemiBold" />
-                            <TextBlock Text="{Binding TotalNodesCount, StringFormat='{}{0:N0}'}"
-                                       FontSize="12"
+                <!-- 1.1 App Brand Header -->
+                <Border Grid.Row="0" Padding="20,20,20,16">
+                    <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto">
+                        <!-- Brand Icon Circle -->
+                        <Border Grid.Row="0" Grid.Column="0"
+                                Width="36" Height="36"
+                                CornerRadius="8"
+                                Background="{DynamicResource SystemControlHighlightAccentBrush}">
+                            <PathIcon Data="{StaticResource IconShieldCheck}"
+                                      Foreground="White"
+                                      Width="18" Height="18"
+                                      VerticalAlignment="Center"
+                                      HorizontalAlignment="Center" />
+                        </Border>
+
+                        <!-- Brand Title & Version -->
+                        <StackPanel Grid.Row="0" Grid.Column="1"
+                                    Margin="12,0,0,0"
+                                    VerticalAlignment="Center">
+                            <TextBlock Text="Universal Backup"
+                                       FontSize="15"
                                        FontWeight="Bold"
-                                       Foreground="{DynamicResource SystemControlHighlightAccentBrush}" />
+                                       Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}" />
+                            <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,2,0,0">
+                                <Border Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
+                                        BorderBrush="{DynamicResource SystemControlTransientBorderBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="4"
+                                        Padding="4,1">
+                                    <TextBlock Text="v1.0-preview"
+                                               FontSize="10"
+                                               FontWeight="SemiBold"
+                                               Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                                </Border>
+                            </StackPanel>
                         </StackPanel>
-                    </Border>
+                    </Grid>
+                </Border>
 
-                    <!-- Metric Badge 2: Memory -->
-                    <Border Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"
-                            CornerRadius="6"
-                            Padding="12,6">
-                        <StackPanel Orientation="Horizontal" Spacing="6">
-                            <TextBlock Text="Allocated Memory:" FontSize="12" FontWeight="SemiBold" />
-                            <TextBlock Text="{Binding MemoryUsageMb}"
-                                       FontSize="12"
-                                       FontWeight="Bold"
-                                       Foreground="#10B981" />
-                        </StackPanel>
-                    </Border>
+                <!-- 1.2 Permanent Navigation Items List -->
+                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Margin="8,4,8,8">
+                    <ItemsControl ItemsSource="{Binding NavigationItems}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="models:NavigationItemModel">
+                                <Button Classes="nav-button"
+                                        Command="{Binding $parent[Window].((vm:MainViewModel)DataContext).SelectNavigationItemCommand}"
+                                        CommandParameter="{Binding}"
+                                        ToolTip.Tip="{Binding Tooltip}"
+                                        Margin="0,2">
+                                    <Grid ColumnDefinitions="Auto,Auto,*,Auto" Height="36">
+                                        <!-- Active Left Accent Indicator Bar -->
+                                        <Border Grid.Column="0"
+                                                Width="3"
+                                                Height="18"
+                                                CornerRadius="2"
+                                                Margin="0,0,10,0"
+                                                VerticalAlignment="Center"
+                                                Background="{DynamicResource SystemControlHighlightAccentBrush}"
+                                                IsVisible="{Binding IsSelected}" />
 
-                    <!-- Metric Badge 3: Generation Time -->
-                    <Border Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"
-                            CornerRadius="6"
-                            Padding="12,6">
-                        <StackPanel Orientation="Horizontal" Spacing="6">
-                            <TextBlock Text="Gen Time:" FontSize="12" FontWeight="SemiBold" />
-                            <TextBlock Text="{Binding GenerationTime}"
-                                       FontSize="12"
-                                       FontWeight="Bold" />
-                        </StackPanel>
-                    </Border>
-                </StackPanel>
-            </Grid>
-        </Border>
+                                        <!-- Navigation Icon -->
+                                        <PathIcon Grid.Column="1"
+                                                  Data="{Binding IconGeometry}"
+                                                  Width="18" Height="18"
+                                                  Margin="4,0,12,0"
+                                                  VerticalAlignment="Center"
+                                                  Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}" />
 
-        <!-- 2. Action Toolbar -->
-        <Border Grid.Row="1" Margin="0,0,0,16">
-            <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,*,Auto">
-                <Button Grid.Column="0"
-                        Command="{Binding LoadTreeCommand}"
-                        Classes="accent"
-                        IsEnabled="{Binding !IsBusy}"
-                        Padding="16,8"
-                        Margin="0,0,8,0">
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                        <TextBlock Text="⚡ Load 250,000 Nodes (Benchmark)" FontWeight="SemiBold" />
+                                        <!-- Section Title -->
+                                        <TextBlock Grid.Column="2"
+                                                   Text="{Binding Title}"
+                                                   FontSize="13"
+                                                   FontWeight="SemiBold"
+                                                   VerticalAlignment="Center"
+                                                   Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}" />
+
+                                        <!-- Optional Badge -->
+                                        <Border Grid.Column="3"
+                                                IsVisible="{Binding BadgeText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                                                Background="{DynamicResource SystemControlHighlightAccentBrush}"
+                                                CornerRadius="4"
+                                                Padding="6,2"
+                                                VerticalAlignment="Center"
+                                                Margin="4,0,0,0">
+                                            <TextBlock Text="{Binding BadgeText}"
+                                                       FontSize="10"
+                                                       FontWeight="Bold"
+                                                       Foreground="White" />
+                                        </Border>
+                                    </Grid>
+                                </Button>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+
+                <!-- 1.3 Sidebar Footer: Engine Status & Theme Toggle -->
+                <Border Grid.Row="2"
+                        BorderBrush="{DynamicResource SystemControlTransientBorderBrush}"
+                        BorderThickness="0,1,0,0"
+                        Padding="16,12">
+                    <StackPanel Spacing="10">
+
+                        <!-- Engine Status Indicator -->
+                        <Grid ColumnDefinitions="Auto,*">
+                            <Ellipse Grid.Column="0"
+                                     Width="8" Height="8"
+                                     Fill="#10B981"
+                                     VerticalAlignment="Center"
+                                     Margin="0,0,8,0" />
+                            <TextBlock Grid.Column="1"
+                                       Text="{Binding EngineStatusText}"
+                                       FontSize="11"
+                                       FontWeight="Medium"
+                                       TextTrimming="CharacterEllipsis"
+                                       Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+                                       VerticalAlignment="Center" />
+                        </Grid>
+
+                        <!-- Privilege / VSS Status Badge -->
+                        <Grid ColumnDefinitions="Auto,*">
+                            <PathIcon Grid.Column="0"
+                                      Data="{StaticResource IconShieldCheck}"
+                                      Width="12" Height="12"
+                                      Foreground="{DynamicResource SystemControlHighlightAccentBrush}"
+                                      VerticalAlignment="Center"
+                                      Margin="0,0,8,0" />
+                            <TextBlock Grid.Column="1"
+                                       Text="{Binding PrivilegeStatusText}"
+                                       FontSize="11"
+                                       TextTrimming="CharacterEllipsis"
+                                       Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+                                       VerticalAlignment="Center" />
+                        </Grid>
+
+                        <!-- Quick Theme Switch Toggle Button -->
+                        <Button Classes="nav-button"
+                                Command="{Binding ToggleThemeCommand}"
+                                Padding="8,6"
+                                Margin="0,4,0,0">
+                            <Grid ColumnDefinitions="Auto,*">
+                                <PathIcon Grid.Column="0"
+                                          Data="{StaticResource IconTheme}"
+                                          Width="14" Height="14"
+                                          Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}"
+                                          VerticalAlignment="Center"
+                                          Margin="0,0,8,0" />
+                                <TextBlock Grid.Column="1"
+                                           Text="{Binding CurrentTheme, StringFormat='Theme: {0}'}"
+                                           FontSize="11"
+                                           FontWeight="SemiBold"
+                                           Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+                                           VerticalAlignment="Center" />
+                            </Grid>
+                        </Button>
                     </StackPanel>
-                </Button>
+                </Border>
 
-                <Button Grid.Column="1"
-                        Command="{Binding SelectAllCommand}"
-                        IsEnabled="{Binding !IsBusy}"
-                        Padding="12,8"
-                        Margin="0,0,8,0">
-                    <TextBlock Text="Select All" />
-                </Button>
-
-                <Button Grid.Column="2"
-                        Command="{Binding ClearSelectionCommand}"
-                        IsEnabled="{Binding !IsBusy}"
-                        Padding="12,8"
-                        Margin="0,0,8,0">
-                    <TextBlock Text="Clear Selection" />
-                </Button>
-
-                <Button Grid.Column="3"
-                        Command="{Binding ExpandLevel1Command}"
-                        IsEnabled="{Binding !IsBusy}"
-                        Padding="12,8">
-                    <TextBlock Text="Expand Level 1" />
-                </Button>
-
-                <!-- Status indicator -->
-                <ProgressBar Grid.Column="5"
-                             IsIndeterminate="True"
-                             IsVisible="{Binding IsBusy}"
-                             Width="150"
-                             Height="16"
-                             VerticalAlignment="Center" />
             </Grid>
         </Border>
 
-        <!-- 3. Central Virtualized TreeDataGrid -->
-        <Border Grid.Row="2"
-                Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
-                BorderBrush="{DynamicResource SystemControlTransientBorderBrush}"
-                BorderThickness="1"
-                CornerRadius="8"
-                ClipToBounds="True">
-            <TreeDataGrid Source="{Binding TreeSource}"
-                          Margin="8" />
-        </Border>
+        <!-- ================================================================= -->
+        <!-- 2. Main Content & Telemetry Area                                   -->
+        <!-- ================================================================= -->
+        <Grid Grid.Column="1" RowDefinitions="Auto,*,Auto"
+              Background="{DynamicResource SystemControlBackgroundAltHighBrush}">
 
-        <!-- 4. Bottom Status & Telemetry Bar -->
-        <Border Grid.Row="3" Margin="0,12,0,0">
-            <Grid ColumnDefinitions="*,Auto">
-                <TextBlock Grid.Column="0"
-                           Text="{Binding StatusMessage}"
-                           FontSize="12"
-                           Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
-                           VerticalAlignment="Center" />
+            <!-- 2.1 Top Page Title & Header Bar -->
+            <Border Grid.Row="0"
+                    Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
+                    BorderBrush="{DynamicResource SystemControlTransientBorderBrush}"
+                    BorderThickness="0,0,0,1"
+                    Padding="28,20">
+                <Grid ColumnDefinitions="*,Auto">
+                    <StackPanel Grid.Column="0" Spacing="4">
+                        <TextBlock Text="{Binding CurrentPageTitle}"
+                                   FontSize="22"
+                                   FontWeight="Bold"
+                                   Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}" />
+                        <TextBlock Text="{Binding CurrentPageSubtitle}"
+                                   FontSize="13"
+                                   Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                    </StackPanel>
 
-                <TextBlock Grid.Column="1"
-                           Text="UI Thread: 60 FPS • Tri-state bubbling: O(log N) • Memory threshold: &lt; 150 MB"
-                           FontSize="11"
-                           Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
-                           VerticalAlignment="Center" />
-            </Grid>
-        </Border>
+                    <!-- Global Activity Progress Bar -->
+                    <ProgressBar Grid.Column="1"
+                                 IsIndeterminate="True"
+                                 IsVisible="{Binding IsBusy}"
+                                 Width="160"
+                                 Height="8"
+                                 CornerRadius="4"
+                                 VerticalAlignment="Center" />
+                </Grid>
+            </Border>
+
+            <!-- 2.2 Active View Content Host (Dynamic via ViewLocator) -->
+            <ContentControl Grid.Row="1"
+                            Content="{Binding CurrentView}" />
+
+            <!-- 2.3 Bottom Telemetry & Status Bar -->
+            <Border Grid.Row="2"
+                    Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"
+                    BorderBrush="{DynamicResource SystemControlTransientBorderBrush}"
+                    BorderThickness="0,1,0,0"
+                    Padding="24,8">
+                <Grid ColumnDefinitions="*,Auto">
+                    <!-- Left: Status message -->
+                    <TextBlock Grid.Column="0"
+                               Text="{Binding StatusMessage}"
+                               FontSize="11"
+                               Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+                               VerticalAlignment="Center" />
+
+                    <!-- Right: Platform telemetry -->
+                    <TextBlock Grid.Column="1"
+                               Text="UI: 60 FPS • SQLite: WAL mode • Zero hardcoded paths"
+                               FontSize="11"
+                               Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+                               VerticalAlignment="Center" />
+                </Grid>
+            </Border>
+
+        </Grid>
+
     </Grid>
 </Window>

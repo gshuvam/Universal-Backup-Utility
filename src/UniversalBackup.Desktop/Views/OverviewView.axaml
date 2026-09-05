@@ -1,0 +1,246 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:UniversalBackup.Desktop.ViewModels"
+             mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="650"
+             x:Class="UniversalBackup.Desktop.Views.OverviewView"
+             x:DataType="vm:OverviewViewModel">
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel Spacing="24" Margin="32">
+
+            <!-- 1. Hero Protection Status Card -->
+            <Border Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
+                    BorderBrush="{DynamicResource SystemControlHighlightAccentBrush}"
+                    BorderThickness="1"
+                    CornerRadius="12"
+                    Padding="24">
+                <Grid ColumnDefinitions="Auto,*,Auto">
+                    <!-- Status Icon -->
+                    <Border Grid.Column="0"
+                            Width="56" Height="56"
+                            CornerRadius="28"
+                            Background="{DynamicResource SystemControlHighlightAccentBrush}"
+                            Opacity="0.15"
+                            VerticalAlignment="Center" />
+                    <PathIcon Grid.Column="0"
+                              Data="{StaticResource NavIconBackup}"
+                              Foreground="{DynamicResource SystemControlHighlightAccentBrush}"
+                              Width="28" Height="28"
+                              VerticalAlignment="Center"
+                              HorizontalAlignment="Center" />
+
+                    <!-- Status Text -->
+                    <StackPanel Grid.Column="1" Margin="20,0,0,0" VerticalAlignment="Center" Spacing="4">
+                        <TextBlock Text="{Binding HealthStatusText}"
+                                   FontSize="20"
+                                   FontWeight="Bold"
+                                   Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}" />
+                        <TextBlock Text="{Binding LastBackupSummary}"
+                                   FontSize="13"
+                                   Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                    </StackPanel>
+
+                    <!-- Quick Action Button -->
+                    <Button Grid.Column="2"
+                            Command="{Binding GoToBackupCommand}"
+                            Classes="accent"
+                            Padding="20,10"
+                            VerticalAlignment="Center"
+                            CornerRadius="6">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <PathIcon Data="{StaticResource NavIconBackup}" Width="16" Height="16" />
+                            <TextBlock Text="Back up now" FontWeight="SemiBold" />
+                        </StackPanel>
+                    </Button>
+                </Grid>
+            </Border>
+
+            <!-- 2. Telemetry & Metric Cards (2x2 Grid) -->
+            <Grid ColumnDefinitions="*,*,*,*" RowDefinitions="Auto">
+                <!-- Card 1: Protected Size -->
+                <Border Grid.Column="0"
+                        Margin="0,0,12,0"
+                        Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
+                        BorderBrush="{DynamicResource SystemControlTransientBorderBrush}"
+                        BorderThickness="1"
+                        CornerRadius="8"
+                        Padding="16">
+                    <StackPanel Spacing="8">
+                        <TextBlock Text="Protected Data"
+                                   FontSize="12"
+                                   FontWeight="Medium"
+                                   Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                        <TextBlock Text="{Binding ProtectedDataSize}"
+                                   FontSize="22"
+                                   FontWeight="Bold"
+                                   Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}" />
+                        <TextBlock Text="Total deduplicated"
+                                   FontSize="11"
+                                   Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                    </StackPanel>
+                </Border>
+
+                <!-- Card 2: Snapshots Count -->
+                <Border Grid.Column="1"
+                        Margin="6,0,6,0"
+                        Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
+                        BorderBrush="{DynamicResource SystemControlTransientBorderBrush}"
+                        BorderThickness="1"
+                        CornerRadius="8"
+                        Padding="16">
+                    <StackPanel Spacing="8">
+                        <TextBlock Text="Saved Snapshots"
+                                   FontSize="12"
+                                   FontWeight="Medium"
+                                   Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                        <TextBlock Text="{Binding TotalSnapshotsCount}"
+                                   FontSize="22"
+                                   FontWeight="Bold"
+                                   Foreground="{DynamicResource SystemControlHighlightAccentBrush}" />
+                        <TextBlock Text="Versioned &amp; encrypted"
+                                   FontSize="11"
+                                   Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                    </StackPanel>
+                </Border>
+
+                <!-- Card 3: Next Run -->
+                <Border Grid.Column="2"
+                        Margin="6,0,6,0"
+                        Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
+                        BorderBrush="{DynamicResource SystemControlTransientBorderBrush}"
+                        BorderThickness="1"
+                        CornerRadius="8"
+                        Padding="16">
+                    <StackPanel Spacing="8">
+                        <TextBlock Text="Next Run"
+                                   FontSize="12"
+                                   FontWeight="Medium"
+                                   Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                        <TextBlock Text="{Binding NextScheduledRun}"
+                                   FontSize="14"
+                                   FontWeight="Bold"
+                                   TextTrimming="CharacterEllipsis"
+                                   Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}" />
+                        <TextBlock Text="Task Scheduler active"
+                                   FontSize="11"
+                                   Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                    </StackPanel>
+                </Border>
+
+                <!-- Card 4: Repository Health -->
+                <Border Grid.Column="3"
+                        Margin="12,0,0,0"
+                        Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
+                        BorderBrush="{DynamicResource SystemControlTransientBorderBrush}"
+                        BorderThickness="1"
+                        CornerRadius="8"
+                        Padding="16">
+                    <StackPanel Spacing="8">
+                        <TextBlock Text="Repository Health"
+                                   FontSize="12"
+                                   FontWeight="Medium"
+                                   Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                        <TextBlock Text="100% Verified"
+                                   FontSize="22"
+                                   FontWeight="Bold"
+                                   Foreground="#10B981" />
+                        <TextBlock Text="{Binding RepositoryStatus}"
+                                   FontSize="11"
+                                   TextTrimming="CharacterEllipsis"
+                                   Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                    </StackPanel>
+                </Border>
+            </Grid>
+
+            <!-- 3. Section Divider with Header -->
+            <TextBlock Text="Quick Actions"
+                       FontSize="16"
+                       FontWeight="SemiBold"
+                       Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}" />
+
+            <!-- 4. Quick Action Tiles (3 Columns) -->
+            <Grid ColumnDefinitions="*,*,*">
+                <!-- Action 1: Back up -->
+                <Button Grid.Column="0"
+                        Margin="0,0,12,0"
+                        Command="{Binding GoToBackupCommand}"
+                        Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
+                        BorderBrush="{DynamicResource SystemControlTransientBorderBrush}"
+                        BorderThickness="1"
+                        CornerRadius="8"
+                        Padding="20"
+                        HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Stretch">
+                    <StackPanel Spacing="10">
+                        <PathIcon Data="{StaticResource NavIconBackup}"
+                                  Width="24" Height="24"
+                                  Foreground="{DynamicResource SystemControlHighlightAccentBrush}"
+                                  HorizontalAlignment="Left" />
+                        <TextBlock Text="New Backup"
+                                   FontSize="15"
+                                   FontWeight="Bold" />
+                        <TextBlock Text="Inspect discovered games, browser profiles, documents, and trigger a secure backup."
+                                   FontSize="12"
+                                   TextWrapping="Wrap"
+                                   Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                    </StackPanel>
+                </Button>
+
+                <!-- Action 2: Restore -->
+                <Button Grid.Column="1"
+                        Margin="6,0,6,0"
+                        Command="{Binding GoToRestoreCommand}"
+                        Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
+                        BorderBrush="{DynamicResource SystemControlTransientBorderBrush}"
+                        BorderThickness="1"
+                        CornerRadius="8"
+                        Padding="20"
+                        HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Stretch">
+                    <StackPanel Spacing="10">
+                        <PathIcon Data="{StaticResource NavIconRestore}"
+                                  Width="24" Height="24"
+                                  Foreground="{DynamicResource SystemControlHighlightAccentBrush}"
+                                  HorizontalAlignment="Left" />
+                        <TextBlock Text="Selective Restore"
+                                   FontSize="15"
+                                   FontWeight="Bold" />
+                        <TextBlock Text="Browse historical snapshots, select items, remap paths, and safely restore."
+                                   FontSize="12"
+                                   TextWrapping="Wrap"
+                                   Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                    </StackPanel>
+                </Button>
+
+                <!-- Action 3: Destinations -->
+                <Button Grid.Column="2"
+                        Margin="12,0,0,0"
+                        Command="{Binding GoToDestinationsCommand}"
+                        Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
+                        BorderBrush="{DynamicResource SystemControlTransientBorderBrush}"
+                        BorderThickness="1"
+                        CornerRadius="8"
+                        Padding="20"
+                        HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Stretch">
+                    <StackPanel Spacing="10">
+                        <PathIcon Data="{StaticResource NavIconDestinations}"
+                                  Width="24" Height="24"
+                                  Foreground="{DynamicResource SystemControlHighlightAccentBrush}"
+                                  HorizontalAlignment="Left" />
+                        <TextBlock Text="Manage Destinations"
+                                   FontSize="15"
+                                   FontWeight="Bold" />
+                        <TextBlock Text="Configure local drives, portable USB disks, and link Google Drive or OneDrive."
+                                   FontSize="12"
+                                   TextWrapping="Wrap"
+                                   Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                    </StackPanel>
+                </Button>
+            </Grid>
+
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>
