@@ -55,3 +55,4 @@ public sealed record LudusaviLicenseAudit
     public required string RequiredAttribution { get; init; }
     public required string RecommendedNotice { get; init; }
 }
+

@@ -123,9 +123,7 @@ public sealed class CloudOAuthService : ICloudOAuthService
             var errHtml = GenerateHtmlPage("Authentication Failed", $"Error from identity provider: {WebUtility.HtmlEncode(error)}", isSuccess: false);
             var errBytes = Encoding.UTF8.GetBytes(errHtml);
             response.StatusCode = 400;
-            response.ContentLength64 = errBytes.Length;
             await response.OutputStream.WriteAsync(errBytes, ct).ConfigureAwait(false);
-            await response.OutputStream.FlushAsync(ct).ConfigureAwait(false);
             response.Close();
             throw new InvalidOperationException($"OAuth authorization denied by provider: {error}");
         }
@@ -135,9 +133,7 @@ public sealed class CloudOAuthService : ICloudOAuthService
             var csrfHtml = GenerateHtmlPage("Security Check Failed", "State parameter mismatch (potential CSRF). Authentication rejected.", isSuccess: false);
             var csrfBytes = Encoding.UTF8.GetBytes(csrfHtml);
             response.StatusCode = 403;
-            response.ContentLength64 = csrfBytes.Length;
             await response.OutputStream.WriteAsync(csrfBytes, ct).ConfigureAwait(false);
-            await response.OutputStream.FlushAsync(ct).ConfigureAwait(false);
             response.Close();
             throw new InvalidOperationException("OAuth state mismatch; possible CSRF attack.");
         }
@@ -147,9 +143,7 @@ public sealed class CloudOAuthService : ICloudOAuthService
             var noCodeHtml = GenerateHtmlPage("Authorization Incomplete", "No authorization code returned by identity provider.", isSuccess: false);
             var noCodeBytes = Encoding.UTF8.GetBytes(noCodeHtml);
             response.StatusCode = 400;
-            response.ContentLength64 = noCodeBytes.Length;
             await response.OutputStream.WriteAsync(noCodeBytes, ct).ConfigureAwait(false);
-            await response.OutputStream.FlushAsync(ct).ConfigureAwait(false);
             response.Close();
             throw new InvalidOperationException("No authorization code received.");
         }
@@ -157,10 +151,10 @@ public sealed class CloudOAuthService : ICloudOAuthService
         var successHtml = GenerateHtmlPage("Authentication Successful!", "You can safely close this browser tab and return to Universal Backup Utility.", isSuccess: true);
         var successBytes = Encoding.UTF8.GetBytes(successHtml);
         response.StatusCode = 200;
-        response.ContentLength64 = successBytes.Length;
         await response.OutputStream.WriteAsync(successBytes, ct).ConfigureAwait(false);
-        await response.OutputStream.FlushAsync(ct).ConfigureAwait(false);
         response.Close();
+
+        listener.Stop();
 
         // Perform token exchange (via custom delegate or default response)
         if (tokenExchangeHandler != null)
@@ -311,3 +305,4 @@ public sealed class CloudOAuthService : ICloudOAuthService
         """;
     }
 }
+

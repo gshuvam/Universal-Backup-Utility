@@ -17,3 +17,4 @@ public interface ILudusaviComplianceService
     /// </summary>
     bool ValidateRuleSchema(string manifestSample);
 }
+

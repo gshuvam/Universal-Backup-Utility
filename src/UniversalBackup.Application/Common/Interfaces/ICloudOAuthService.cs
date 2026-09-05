@@ -28,3 +28,4 @@ public interface ICloudOAuthService
     /// </summary>
     string GenerateRcloneRemoteConfig(CloudProvider provider, string remoteName, OAuthTokenResponse token);
 }
+
