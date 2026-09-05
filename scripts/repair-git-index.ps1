@@ -17,6 +17,6 @@ if ($null -eq $index -or $index.Length -eq 0) {
     Write-Host "Index is healthy ($($index.Length) bytes)." -ForegroundColor Green
 }
 
-git update-index --refresh
+git update-index --index-version 2 --refresh
 git status
 
