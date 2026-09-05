@@ -37,7 +37,7 @@ public sealed class ProgressiveDiscoveryScanner : IDiscoveryScanner
 
         _providers = providers != null
             ? providers.ToList()
-            : [new KnownFoldersDiscoveryProvider()];
+            : DiscoveryProviderRegistry.CreateDefaultProviders().ToList();
     }
 
     public void Pause() => _pauseEvent.Reset();
