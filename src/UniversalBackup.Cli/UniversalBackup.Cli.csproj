@@ -1,0 +1,17 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\UniversalBackup.Application\UniversalBackup.Application.csproj" />
+    <ProjectReference Include="..\UniversalBackup.Infrastructure\UniversalBackup.Infrastructure.csproj" />
+    <ProjectReference Include="..\UniversalBackup.Discovery\UniversalBackup.Discovery.csproj" />
+    <ProjectReference Include="..\UniversalBackup.LegacyImport\UniversalBackup.LegacyImport.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>

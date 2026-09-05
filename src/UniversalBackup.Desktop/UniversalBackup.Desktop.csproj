@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Folder Include="Models\" />
+    <AvaloniaResource Include="Assets\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="11.2.4" />
+    <PackageReference Include="Avalonia.Desktop" Version="11.2.4" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.2.4" />
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="11.2.4" />
+    <PackageReference Include="Avalonia.Diagnostics" Version="11.2.4" Condition="'$(Configuration)' == 'Debug'" />
+    <PackageReference Include="Avalonia.Controls.TreeDataGrid" Version="11.1.1" />
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\UniversalBackup.Application\UniversalBackup.Application.csproj" />
+    <ProjectReference Include="..\UniversalBackup.Infrastructure\UniversalBackup.Infrastructure.csproj" />
+    <ProjectReference Include="..\UniversalBackup.Discovery\UniversalBackup.Discovery.csproj" />
+    <ProjectReference Include="..\UniversalBackup.LegacyImport\UniversalBackup.LegacyImport.csproj" />
+  </ItemGroup>
+</Project>
