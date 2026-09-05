@@ -33,3 +33,4 @@ public sealed record CatalogRebuildResult(
     int ReplicasReconstructed,
     IReadOnlyList<string> DiscoveredBackupSetIds,
     IReadOnlyList<string> Warnings);
+

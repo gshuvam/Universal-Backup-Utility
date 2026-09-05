@@ -64,3 +64,4 @@ public interface ICatalogService
         IResticEngine resticEngine,
         CancellationToken ct = default);
 }
+

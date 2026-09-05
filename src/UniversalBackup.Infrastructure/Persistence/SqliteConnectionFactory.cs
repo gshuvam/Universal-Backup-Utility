@@ -56,3 +56,4 @@ public sealed class SqliteConnectionFactory
         return connection;
     }
 }
+

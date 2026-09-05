@@ -179,3 +179,4 @@ public sealed class CatalogMigrationRunner
         }
     }
 }
+
