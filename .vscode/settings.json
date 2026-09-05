@@ -1,0 +1,17 @@
+{
+  "git.autofetch": false,
+  "git.detectSubmodules": false,
+  "git.untrackedChanges": "separate",
+  "files.watcherExclude": {
+    "**/.git/objects/**": true,
+    "**/.git/subtree-cache/**": true,
+    "**/node_modules/**": true,
+    "**/bin/**": true,
+    "**/obj/**": true,
+    "**/TestResults/**": true
+  },
+  "files.exclude": {
+    "**/bin": true,
+    "**/obj": true
+  }
+}
