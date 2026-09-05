@@ -247,3 +247,4 @@ public sealed class EpicGamesDiscoveryProvider : IDiscoveryProvider
             consistency: ConsistencyClass.FilesystemSnapshot);
     }
 }
+

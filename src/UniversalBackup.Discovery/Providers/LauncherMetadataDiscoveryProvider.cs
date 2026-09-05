@@ -171,3 +171,4 @@ public sealed class LauncherMetadataDiscoveryProvider : IDiscoveryProvider
         return list;
     }
 }
+

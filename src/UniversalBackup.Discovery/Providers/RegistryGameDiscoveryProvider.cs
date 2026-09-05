@@ -200,3 +200,4 @@ public sealed class RegistryGameDiscoveryProvider : IDiscoveryProvider
         return string.IsNullOrWhiteSpace(safe) ? "unknown-game" : safe;
     }
 }
+

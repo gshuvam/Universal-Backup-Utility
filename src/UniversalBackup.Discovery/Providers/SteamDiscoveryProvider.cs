@@ -368,3 +368,4 @@ public sealed class SteamDiscoveryProvider : IDiscoveryProvider
             consistency: ConsistencyClass.FilesystemSnapshot);
     }
 }
+

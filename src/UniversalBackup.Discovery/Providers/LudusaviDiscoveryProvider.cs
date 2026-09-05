@@ -241,3 +241,4 @@ public sealed class LudusaviDiscoveryProvider : IDiscoveryProvider
         return string.IsNullOrWhiteSpace(safe) ? "item" : safe;
     }
 }
+

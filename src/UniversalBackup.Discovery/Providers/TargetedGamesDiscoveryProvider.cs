@@ -329,3 +329,4 @@ public sealed class TargetedGamesDiscoveryProvider : IDiscoveryProvider
             consistency: ConsistencyClass.FilesystemSnapshot);
     }
 }
+
