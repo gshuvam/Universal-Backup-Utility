@@ -61,3 +61,4 @@ public class ThemeService : IThemeService
         SetTheme(nextTheme);
     }
 }
+

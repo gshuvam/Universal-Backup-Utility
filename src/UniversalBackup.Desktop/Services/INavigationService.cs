@@ -48,3 +48,4 @@ public interface INavigationService
     /// </summary>
     bool CanNavigate(NavigationSection section);
 }
+

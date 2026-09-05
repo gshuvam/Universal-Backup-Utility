@@ -19,3 +19,4 @@ if ($null -eq $index -or $index.Length -eq 0) {
 
 git update-index --refresh
 git status
+

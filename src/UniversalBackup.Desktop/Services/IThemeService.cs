@@ -38,3 +38,4 @@ public interface IThemeService
     /// </summary>
     void ToggleTheme();
 }
+

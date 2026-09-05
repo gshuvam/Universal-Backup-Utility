@@ -26,3 +26,4 @@ public partial class DestinationsViewModel : ViewModelBase
         StatusMessage = "Destination statuses verified.";
     }
 }
+

@@ -26,3 +26,4 @@ public partial class RestoreViewModel : ViewModelBase
         StatusMessage = "Refreshed repository snapshot timeline.";
     }
 }
+

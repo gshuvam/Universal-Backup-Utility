@@ -54,3 +54,4 @@ public partial class SettingsViewModel : ViewModelBase
         StatusMessage = $"Theme switched to {SelectedTheme}.";
     }
 }
+

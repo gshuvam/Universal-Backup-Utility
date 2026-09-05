@@ -23,3 +23,4 @@ public partial class ActivityViewModel : ViewModelBase
         StatusMessage = "Audit log refreshed.";
     }
 }
+

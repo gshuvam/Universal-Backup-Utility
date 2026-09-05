@@ -23,3 +23,4 @@ public partial class NavigationItemModel : ObservableObject
     [ObservableProperty]
     private bool _isSelected;
 }
+
