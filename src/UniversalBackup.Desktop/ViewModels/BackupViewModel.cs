@@ -29,6 +29,12 @@ public partial class BackupViewModel : ViewModelBase
     private readonly ICatalogService? _catalogService;
     private CancellationTokenSource? _scanCts;
     private readonly List<DiscoveredItem> _discoveredItems = [];
+    private readonly Dictionary<string, bool> _selectionState = new(StringComparer.OrdinalIgnoreCase);
+    private bool _isUpdatingTreeSelections;
+    private bool _isApplyingPreset;
+
+    public IReadOnlyDictionary<string, bool> SelectionState => _selectionState;
+    public IReadOnlyList<DiscoveredItem> DiscoveredItems => _discoveredItems;
 
     [ObservableProperty]
     private ObservableCollection<CategoryCardModel> _categoryCards = [];
@@ -62,8 +68,48 @@ public partial class BackupViewModel : ViewModelBase
     [ObservableProperty]
     private string _selectedPreset = "Game Saves Only";
 
+    public bool IsPersonalEssentialsPreset => string.Equals(SelectedPreset, "Personal Essentials", StringComparison.OrdinalIgnoreCase);
+    public bool IsGameSavesOnlyPreset => string.Equals(SelectedPreset, "Game Saves Only", StringComparison.OrdinalIgnoreCase);
+    public bool IsGamesWithInstallationsPreset => string.Equals(SelectedPreset, "Games with Installations", StringComparison.OrdinalIgnoreCase);
+    public bool IsEntireComputerPreset => string.Equals(SelectedPreset, "Entire Accessible Computer", StringComparison.OrdinalIgnoreCase);
+    public bool IsCustomPreset => string.Equals(SelectedPreset, "Custom", StringComparison.OrdinalIgnoreCase);
+
+    partial void OnSelectedPresetChanged(string value)
+    {
+        OnPropertyChanged(nameof(IsPersonalEssentialsPreset));
+        OnPropertyChanged(nameof(IsGameSavesOnlyPreset));
+        OnPropertyChanged(nameof(IsGamesWithInstallationsPreset));
+        OnPropertyChanged(nameof(IsEntireComputerPreset));
+        OnPropertyChanged(nameof(IsCustomPreset));
+    }
+
     [ObservableProperty]
     private string _searchFilterText = string.Empty;
+
+    [ObservableProperty]
+    private string _filterMatchCountText = string.Empty;
+
+    [ObservableProperty]
+    private bool _isFilterActive;
+
+    partial void OnSearchFilterTextChanged(string value)
+    {
+        if (!string.IsNullOrWhiteSpace(value))
+        {
+            IsFilterActive = true;
+            int matches = _discoveredItems.Count(item => DiscoveryTreeBuilder.MatchesSearch(item, value));
+            FilterMatchCountText = $"{matches:N0} match{(matches == 1 ? "" : "es")}";
+            StatusMessage = $"Filter active: '{value}' ({FilterMatchCountText})";
+        }
+        else
+        {
+            IsFilterActive = false;
+            FilterMatchCountText = string.Empty;
+            StatusMessage = "Filter cleared.";
+        }
+
+        RebuildLiveTree(SelectedCategoryCard?.CategoryKey, value);
+    }
 
     [ObservableProperty]
     private int _totalDiscoveredItemsCount;
@@ -227,6 +273,7 @@ public partial class BackupViewModel : ViewModelBase
         var ct = _scanCts.Token;
 
         _discoveredItems.Clear();
+        _selectionState.Clear();
 
         foreach (var card in CategoryCards)
         {
@@ -282,6 +329,7 @@ public partial class BackupViewModel : ViewModelBase
                 await foreach (var item in _discoveryScanner.ScanProgressiveAsync(scanOptions, progress, ct))
                 {
                     _discoveredItems.Add(item);
+                    SetItemSelectionForPreset(item, SelectedPreset);
                     var card = ResolveCategoryCard(item);
                     long itemSize = item.Components.Sum(c => c.EstimatedSizeBytes ?? 0);
 
@@ -305,7 +353,7 @@ public partial class BackupViewModel : ViewModelBase
                     card.SetStatus(card.ItemCount > 0 ? "Ready" : "0 found", isScanning: false);
                 }
 
-                RebuildLiveTree(SelectedCategoryCard?.CategoryKey);
+                RebuildLiveTree(SelectedCategoryCard?.CategoryKey, SearchFilterText);
                 StatusMessage = $"Progressive scan complete: {TotalDiscoveredItemsCount:N0} items ({TotalDiscoveredFormattedSize}) discovered.";
             });
         }
@@ -324,16 +372,29 @@ public partial class BackupViewModel : ViewModelBase
     }
 
     /// <summary>
-    /// Rebuilds the TreeDataGrid from discovered items according to the active category filter.
+    /// Rebuilds the TreeDataGrid from discovered items according to the active category filter, search query, and preserved selection state.
     /// </summary>
-    public void RebuildLiveTree(string? categoryFilter = null)
+    public void RebuildLiveTree(string? categoryFilter = null, string? searchQuery = null)
     {
         var sw = Stopwatch.StartNew();
-        _rootNodes = DiscoveryTreeBuilder.BuildTree(_discoveredItems, categoryFilter);
+        searchQuery ??= string.IsNullOrWhiteSpace(SearchFilterText) ? null : SearchFilterText;
+
+        _rootNodes = DiscoveryTreeBuilder.BuildTree(_discoveredItems, categoryFilter, searchQuery, _selectionState);
 
         void HookSelection(TreeNodeItem node)
         {
-            node.SelectionChanged += _ => RecalculateSelectionTotals();
+            node.SelectionChanged += changedNode =>
+            {
+                if (_isUpdatingTreeSelections) return;
+
+                UpdateSelectionStateFromNode(changedNode);
+                if (!_isApplyingPreset)
+                {
+                    SelectedPreset = "Custom";
+                }
+                RecalculateSelectionTotals();
+            };
+
             if (node.HasChildren)
             {
                 foreach (var child in node.Children)
@@ -384,12 +445,70 @@ public partial class BackupViewModel : ViewModelBase
 
     public void RecalculateSelectionTotals()
     {
-        TreeNodeItem.CalculateSelectionTotals(
-            _rootNodes,
-            out int count,
-            out long bytes,
-            out bool lockedWarning,
-            out bool offlineWarning);
+        int count = 0;
+        long bytes = 0;
+        bool lockedWarning = false;
+        bool offlineWarning = false;
+
+        if (_discoveredItems.Count > 0)
+        {
+            foreach (var item in _discoveredItems)
+            {
+                string cat = item.Category ?? DiscoveryTreeBuilder.ClassifyCategory(item);
+                if (item.Components.Count > 0)
+                {
+                    foreach (var comp in item.Components)
+                    {
+                        if (comp.SourceRoots.Count > 0)
+                        {
+                            long perRootSize = comp.EstimatedSizeBytes.HasValue ? (comp.EstimatedSizeBytes.Value / comp.SourceRoots.Count) : 0;
+                            foreach (var root in comp.SourceRoots)
+                            {
+                                if (_selectionState.TryGetValue(root.OriginalPath, out bool isChecked) && isChecked)
+                                {
+                                    count++;
+                                    bytes += perRootSize;
+                                    if (comp.Consistency == UniversalBackup.Domain.Enums.ConsistencyClass.FilesystemSnapshot)
+                                    {
+                                        lockedWarning = true;
+                                    }
+                                }
+                            }
+                        }
+                        else
+                        {
+                            string compKey = string.IsNullOrEmpty(comp.Id) ? $"{item.Id}:{comp.DisplayName}" : comp.Id;
+                            if (_selectionState.TryGetValue(compKey, out bool isChecked) && isChecked)
+                            {
+                                count++;
+                                bytes += comp.EstimatedSizeBytes ?? 0;
+                                if (comp.Consistency == UniversalBackup.Domain.Enums.ConsistencyClass.FilesystemSnapshot)
+                                {
+                                    lockedWarning = true;
+                                }
+                            }
+                        }
+                    }
+                }
+                else
+                {
+                    if (_selectionState.TryGetValue(item.Id, out bool isChecked) && isChecked)
+                    {
+                        count++;
+                        bytes += item.Components.Sum(c => c.EstimatedSizeBytes ?? 0);
+                    }
+                }
+            }
+        }
+        else
+        {
+            TreeNodeItem.CalculateSelectionTotals(
+                _rootNodes,
+                out count,
+                out bytes,
+                out lockedWarning,
+                out offlineWarning);
+        }
 
         DispatchToUi(() =>
         {
@@ -399,6 +518,21 @@ public partial class BackupViewModel : ViewModelBase
             HasLockedFilesWarning = lockedWarning;
             HasOfflineCloudWarning = offlineWarning;
         });
+    }
+
+    private void UpdateSelectionStateFromNode(TreeNodeItem node)
+    {
+        if (node.HasChildren)
+        {
+            foreach (var child in node.Children)
+            {
+                UpdateSelectionStateFromNode(child);
+            }
+        }
+        else if (node.IsChecked.HasValue)
+        {
+            _selectionState[node.SelectionKey] = node.IsChecked.Value;
+        }
     }
 
     public CategoryCardModel ResolveCategoryCard(DiscoveredItem item)
@@ -545,23 +679,337 @@ public partial class BackupViewModel : ViewModelBase
     }
 
     [RelayCommand]
+    public void ApplyPreset(string presetName)
+    {
+        if (string.IsNullOrWhiteSpace(presetName)) return;
+
+        SelectedPreset = presetName;
+
+        if (presetName.Equals("Custom", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        _isApplyingPreset = true;
+        _isUpdatingTreeSelections = true;
+        try
+        {
+            _selectionState.Clear();
+            foreach (var item in _discoveredItems)
+            {
+                SetItemSelectionForPreset(item, presetName);
+            }
+
+            if (_discoveredItems.Count == 0 && _rootNodes.Count > 0)
+            {
+                bool selectAll = presetName.Equals("Entire Accessible Computer", StringComparison.OrdinalIgnoreCase);
+                foreach (var root in _rootNodes)
+                {
+                    root.SetChecked(selectAll, cascadeDown: true, bubbleUp: true);
+                }
+            }
+        }
+        finally
+        {
+            _isUpdatingTreeSelections = false;
+            _isApplyingPreset = false;
+        }
+
+        RebuildLiveTree(SelectedCategoryCard?.CategoryKey, SearchFilterText);
+        StatusMessage = $"Applied selection preset: {presetName}";
+    }
+
+    public void AddDiscoveredItems(IEnumerable<DiscoveredItem> items)
+    {
+        ArgumentNullException.ThrowIfNull(items);
+        foreach (var item in items)
+        {
+            _discoveredItems.Add(item);
+            SetItemSelectionForPreset(item, SelectedPreset);
+        }
+        RebuildLiveTree(SelectedCategoryCard?.CategoryKey, SearchFilterText);
+    }
+
+    private void SetItemSelectionForPreset(DiscoveredItem item, string presetName)
+    {
+        string cat = item.Category ?? DiscoveryTreeBuilder.ClassifyCategory(item);
+
+        if (item.Components.Count > 0)
+        {
+            foreach (var comp in item.Components)
+            {
+                bool select = ShouldSelectComponent(comp, cat, presetName);
+                if (comp.SourceRoots.Count > 0)
+                {
+                    foreach (var root in comp.SourceRoots)
+                    {
+                        _selectionState[root.OriginalPath] = select;
+                    }
+                }
+                else
+                {
+                    string compKey = string.IsNullOrEmpty(comp.Id) ? $"{item.Id}:{comp.DisplayName}" : comp.Id;
+                    _selectionState[compKey] = select;
+                }
+            }
+        }
+        else
+        {
+            bool select = ShouldSelectItemWithoutComponents(item, cat, presetName);
+            _selectionState[item.Id] = select;
+        }
+    }
+
+    private static bool ShouldSelectComponent(LogicalComponent comp, string category, string presetName)
+    {
+        if (presetName.Equals("Entire Accessible Computer", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        if (presetName.Equals("Games with Installations", StringComparison.OrdinalIgnoreCase))
+        {
+            return category.Equals("Games", StringComparison.OrdinalIgnoreCase) ||
+                   category.Equals("Screenshots & captures", StringComparison.OrdinalIgnoreCase);
+        }
+
+        if (presetName.Equals("Game Saves Only", StringComparison.OrdinalIgnoreCase))
+        {
+            if (category.Equals("Screenshots & captures", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            if (!category.Equals("Games", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            return comp.Type is not UniversalBackup.Domain.Enums.LogicalComponentType.InstallationFiles
+                               and not UniversalBackup.Domain.Enums.LogicalComponentType.WorkshopMods;
+        }
+
+        if (presetName.Equals("Personal Essentials", StringComparison.OrdinalIgnoreCase))
+        {
+            if (category.Equals("Documents", StringComparison.OrdinalIgnoreCase) ||
+                category.Equals("Settings to back up", StringComparison.OrdinalIgnoreCase) ||
+                category.Equals("Apps", StringComparison.OrdinalIgnoreCase) ||
+                category.Equals("Photos & videos", StringComparison.OrdinalIgnoreCase) ||
+                category.Equals("Screenshots & captures", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            if (category.Equals("Games", StringComparison.OrdinalIgnoreCase))
+            {
+                return comp.Type is not UniversalBackup.Domain.Enums.LogicalComponentType.InstallationFiles
+                                   and not UniversalBackup.Domain.Enums.LogicalComponentType.WorkshopMods;
+            }
+
+            if (category.Equals("App Data", StringComparison.OrdinalIgnoreCase))
+            {
+                return comp.Type != UniversalBackup.Domain.Enums.LogicalComponentType.InstallationFiles;
+            }
+
+            return false;
+        }
+
+        return false;
+    }
+
+    private static bool ShouldSelectItemWithoutComponents(DiscoveredItem item, string category, string presetName)
+    {
+        if (presetName.Equals("Entire Accessible Computer", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        if (presetName.Equals("Personal Essentials", StringComparison.OrdinalIgnoreCase))
+        {
+            return category.Equals("Documents", StringComparison.OrdinalIgnoreCase) ||
+                   category.Equals("Settings to back up", StringComparison.OrdinalIgnoreCase) ||
+                   category.Equals("Apps", StringComparison.OrdinalIgnoreCase) ||
+                   category.Equals("Photos & videos", StringComparison.OrdinalIgnoreCase);
+        }
+
+        if (presetName.Equals("Game Saves Only", StringComparison.OrdinalIgnoreCase) ||
+            presetName.Equals("Games with Installations", StringComparison.OrdinalIgnoreCase))
+        {
+            return category.Equals("Games", StringComparison.OrdinalIgnoreCase) ||
+                   category.Equals("Screenshots & captures", StringComparison.OrdinalIgnoreCase);
+        }
+
+        return false;
+    }
+
+    [RelayCommand]
+    public void ClearSearchFilter()
+    {
+        SearchFilterText = string.Empty;
+    }
+
+    [RelayCommand]
+    public void SelectVisible()
+    {
+        _isUpdatingTreeSelections = true;
+        try
+        {
+            void CheckVisible(TreeNodeItem node)
+            {
+                if (node.HasChildren)
+                {
+                    foreach (var child in node.Children)
+                    {
+                        CheckVisible(child);
+                    }
+                    node.RecalculateCheckedState();
+                }
+                else
+                {
+                    node.SetChecked(true, cascadeDown: false, bubbleUp: false);
+                    _selectionState[node.SelectionKey] = true;
+                }
+            }
+
+            foreach (var root in _rootNodes)
+            {
+                CheckVisible(root);
+                root.RecalculateCheckedState();
+            }
+        }
+        finally
+        {
+            _isUpdatingTreeSelections = false;
+        }
+
+        SelectedPreset = "Custom";
+        RecalculateSelectionTotals();
+        StatusMessage = "Selected all currently visible items.";
+    }
+
+    [RelayCommand]
+    public void DeselectVisible()
+    {
+        _isUpdatingTreeSelections = true;
+        try
+        {
+            void UncheckVisible(TreeNodeItem node)
+            {
+                if (node.HasChildren)
+                {
+                    foreach (var child in node.Children)
+                    {
+                        UncheckVisible(child);
+                    }
+                    node.RecalculateCheckedState();
+                }
+                else
+                {
+                    node.SetChecked(false, cascadeDown: false, bubbleUp: false);
+                    _selectionState[node.SelectionKey] = false;
+                }
+            }
+
+            foreach (var root in _rootNodes)
+            {
+                UncheckVisible(root);
+                root.RecalculateCheckedState();
+            }
+        }
+        finally
+        {
+            _isUpdatingTreeSelections = false;
+        }
+
+        SelectedPreset = "Custom";
+        RecalculateSelectionTotals();
+        StatusMessage = "Deselected all currently visible items.";
+    }
+
+    [RelayCommand]
     public void SelectAll()
     {
-        foreach (var root in _rootNodes)
+        _isUpdatingTreeSelections = true;
+        try
         {
-            root.IsChecked = true;
+            foreach (var key in _selectionState.Keys.ToList())
+            {
+                _selectionState[key] = true;
+            }
+
+            foreach (var item in _discoveredItems)
+            {
+                SetItemSelectionState(item, true);
+            }
+
+            foreach (var root in _rootNodes)
+            {
+                root.SetChecked(true, cascadeDown: true, bubbleUp: true);
+            }
         }
+        finally
+        {
+            _isUpdatingTreeSelections = false;
+        }
+
+        SelectedPreset = "Custom";
         RecalculateSelectionTotals();
     }
 
     [RelayCommand]
     public void ClearSelection()
     {
-        foreach (var root in _rootNodes)
+        _isUpdatingTreeSelections = true;
+        try
         {
-            root.IsChecked = false;
+            foreach (var key in _selectionState.Keys.ToList())
+            {
+                _selectionState[key] = false;
+            }
+
+            foreach (var item in _discoveredItems)
+            {
+                SetItemSelectionState(item, false);
+            }
+
+            foreach (var root in _rootNodes)
+            {
+                root.SetChecked(false, cascadeDown: true, bubbleUp: true);
+            }
         }
+        finally
+        {
+            _isUpdatingTreeSelections = false;
+        }
+
+        SelectedPreset = "Custom";
         RecalculateSelectionTotals();
+    }
+
+    private void SetItemSelectionState(DiscoveredItem item, bool isChecked)
+    {
+        if (item.Components.Count > 0)
+        {
+            foreach (var comp in item.Components)
+            {
+                if (comp.SourceRoots.Count > 0)
+                {
+                    foreach (var root in comp.SourceRoots)
+                    {
+                        _selectionState[root.OriginalPath] = isChecked;
+                    }
+                }
+                else
+                {
+                    string compKey = string.IsNullOrEmpty(comp.Id) ? $"{item.Id}:{comp.DisplayName}" : comp.Id;
+                    _selectionState[compKey] = isChecked;
+                }
+            }
+        }
+        else
+        {
+            _selectionState[item.Id] = isChecked;
+        }
     }
 
     [RelayCommand]

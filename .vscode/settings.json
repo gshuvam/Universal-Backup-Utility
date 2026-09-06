@@ -13,5 +13,13 @@
   "files.exclude": {
     "**/bin": true,
     "**/obj": true
-  }
+  },
+  "search.exclude": {
+    "**/.git": true,
+    "**/bin": true,
+    "**/obj": true
+  },
+  "git.autoRepositoryDetection": false,
+  "git.decorations.enabled": false,
+  "git.openRepositoryInParentFolders": "never"
 }

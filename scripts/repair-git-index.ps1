@@ -9,12 +9,20 @@ if (Test-Path .git/index.lock) {
 }
 
 $index = Get-Item .git/index -ErrorAction SilentlyContinue
+$backup = Get-Item .git/index.backup -ErrorAction SilentlyContinue
+
 if ($null -eq $index -or $index.Length -eq 0) {
-    Write-Host "Detected corrupted or 0-byte .git/index. Rebuilding from HEAD..." -ForegroundColor Yellow
-    Remove-Item .git/index -Force -ErrorAction SilentlyContinue
-    git reset
+    if ($null -ne $backup -and $backup.Length -gt 0) {
+        Write-Host "Detected corrupted or 0-byte .git/index. Restoring immediately from shadow backup ($($backup.Length) bytes)..." -ForegroundColor Yellow
+        Copy-Item .git/index.backup .git/index -Force
+    } else {
+        Write-Host "Detected corrupted or 0-byte .git/index. Rebuilding from HEAD..." -ForegroundColor Yellow
+        Remove-Item .git/index -Force -ErrorAction SilentlyContinue
+        git reset
+    }
 } else {
     Write-Host "Index is healthy ($($index.Length) bytes)." -ForegroundColor Green
+    Copy-Item .git/index .git/index.backup -Force
 }
 
 git update-index --index-version 2 --refresh

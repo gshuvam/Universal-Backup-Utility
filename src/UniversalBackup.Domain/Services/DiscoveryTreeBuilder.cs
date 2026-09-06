@@ -7,19 +7,28 @@ using UniversalBackup.Domain.Models;
 namespace UniversalBackup.Domain.Services;
 
 /// <summary>
-/// Builds virtualized hierarchical TreeNodeItem structures from DiscoveredItem domain records.
+/// Builds virtualized hierarchical TreeNodeItem structures from DiscoveredItem domain records,
+/// with support for category filtering, search queries, and preserved selection state dictionaries.
 /// </summary>
 public static class DiscoveryTreeBuilder
 {
     public static List<TreeNodeItem> BuildTree(
         IEnumerable<DiscoveredItem> items,
-        string? categoryFilter = null)
+        string? categoryFilter = null,
+        string? searchQuery = null,
+        IDictionary<string, bool>? selectionState = null)
     {
         ArgumentNullException.ThrowIfNull(items);
 
         var allItems = items.ToList();
 
-        // 1. Group by resolved category
+        // 1. Filter by search query if provided
+        if (!string.IsNullOrWhiteSpace(searchQuery))
+        {
+            allItems = allItems.Where(item => MatchesSearch(item, searchQuery)).ToList();
+        }
+
+        // 2. Group by resolved category
         var categoryBuckets = new Dictionary<string, List<DiscoveredItem>>(StringComparer.OrdinalIgnoreCase)
         {
             ["Games"] = [],
@@ -43,18 +52,20 @@ public static class DiscoveryTreeBuilder
             list.Add(item);
         }
 
-        // 2. If filtered to a specific category, return items in that category directly as roots
+        // 3. If filtered to a specific category, return items in that category directly as roots
         if (!string.IsNullOrWhiteSpace(categoryFilter) &&
             !categoryFilter.Equals("All Files & Folders", StringComparison.OrdinalIgnoreCase))
         {
             if (categoryBuckets.TryGetValue(categoryFilter, out var filteredItems))
             {
-                return filteredItems.Select(item => CreateApplicationNode(item)).ToList();
+                var roots = filteredItems.Select(item => CreateApplicationNode(item, null, selectionState)).ToList();
+                foreach (var r in roots) r.RecalculateCheckedState();
+                return roots;
             }
             return [];
         }
 
-        // 3. Otherwise, build full category hierarchy
+        // 4. Otherwise, build full category hierarchy
         var categoryRoots = new List<TreeNodeItem>();
 
         foreach (var (catName, catItems) in categoryBuckets)
@@ -70,22 +81,60 @@ public static class DiscoveryTreeBuilder
 
             foreach (var item in catItems)
             {
-                var appNode = CreateApplicationNode(item, catNode);
+                var appNode = CreateApplicationNode(item, catNode, selectionState);
                 catNode.AddChild(appNode);
             }
 
+            catNode.RecalculateCheckedState();
             categoryRoots.Add(catNode);
         }
 
         return categoryRoots;
     }
 
-    private static TreeNodeItem CreateApplicationNode(DiscoveredItem item, TreeNodeItem? parent = null)
+    public static bool MatchesSearch(DiscoveredItem item, string query)
+    {
+        if (string.IsNullOrWhiteSpace(query)) return true;
+        query = query.Trim();
+
+        if (item.Title.Contains(query, StringComparison.OrdinalIgnoreCase)) return true;
+        if (item.ProviderId.Contains(query, StringComparison.OrdinalIgnoreCase)) return true;
+        if (item.Category?.Contains(query, StringComparison.OrdinalIgnoreCase) == true) return true;
+
+        foreach (var comp in item.Components)
+        {
+            if (comp.DisplayName.Contains(query, StringComparison.OrdinalIgnoreCase)) return true;
+            if (comp.Type.ToString().Contains(query, StringComparison.OrdinalIgnoreCase)) return true;
+            foreach (var root in comp.SourceRoots)
+            {
+                if (root.OriginalPath.Contains(query, StringComparison.OrdinalIgnoreCase)) return true;
+            }
+        }
+
+        foreach (var ev in item.Evidence)
+        {
+            if (ev.Contains(query, StringComparison.OrdinalIgnoreCase)) return true;
+        }
+
+        foreach (var (k, v) in item.Metadata)
+        {
+            if (k.Contains(query, StringComparison.OrdinalIgnoreCase) || v.Contains(query, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+
+        return false;
+    }
+
+    private static TreeNodeItem CreateApplicationNode(
+        DiscoveredItem item,
+        TreeNodeItem? parent = null,
+        IDictionary<string, bool>? selectionState = null)
     {
         long totalSize = item.Components.Sum(c => c.EstimatedSizeBytes ?? 0);
         string primaryPath = item.Components.FirstOrDefault()?.SourceRoots.FirstOrDefault()?.OriginalPath ?? item.Title;
+        bool hasComponents = item.Components.Count > 0;
 
-        var appNode = new TreeNodeItem(item.Title, totalSize, isFolder: true, parent)
+        var appNode = new TreeNodeItem(item.Title, hasComponents ? 0 : totalSize, isFolder: true, parent)
         {
             NodeType = "Application",
             Category = item.Category ?? ClassifyCategory(item),
@@ -96,14 +145,16 @@ public static class DiscoveryTreeBuilder
             InclusionReason = GenerateInclusionReason(item)
         };
 
-        if (item.Components.Count > 0)
+        if (hasComponents)
         {
             foreach (var comp in item.Components)
             {
                 long compSize = comp.EstimatedSizeBytes ?? 0;
                 string compPath = comp.SourceRoots.FirstOrDefault()?.OriginalPath ?? comp.DisplayName;
+                bool hasRoots = comp.SourceRoots.Count > 0;
+                long perRootSize = hasRoots ? (compSize / comp.SourceRoots.Count) : 0;
 
-                var compNode = new TreeNodeItem(comp.DisplayName, compSize, isFolder: comp.SourceRoots.Count > 0, appNode)
+                var compNode = new TreeNodeItem(comp.DisplayName, hasRoots ? 0 : compSize, isFolder: hasRoots, appNode)
                 {
                     NodeType = "Component",
                     Category = appNode.Category,
@@ -117,31 +168,57 @@ public static class DiscoveryTreeBuilder
                     InclusionReason = $"Component '{comp.DisplayName}' ({comp.Type}) with {comp.SourceRoots.Count} source root(s). Consistency: {comp.Consistency}."
                 };
 
-                foreach (var root in comp.SourceRoots)
+                if (hasRoots)
                 {
-                    var rootNode = new TreeNodeItem(root.OriginalPath, compSize, isFolder: false, compNode)
+                    foreach (var root in comp.SourceRoots)
                     {
-                        NodeType = "Directory",
-                        Category = appNode.Category,
-                        Path = root.OriginalPath,
-                        Confidence = item.Confidence,
-                        Consistency = comp.Consistency,
-                        ProviderId = item.ProviderId,
-                        LogicalComponent = comp,
-                        DiscoveredItem = item,
-                        InclusionReason = $"Resolved filesystem root: '{root.OriginalPath}'. Volume: {root.VolumeGuid ?? "Auto"}."
-                    };
-                    compNode.AddChild(rootNode);
+                        var rootNode = new TreeNodeItem(root.OriginalPath, perRootSize, isFolder: false, compNode)
+                        {
+                            NodeType = "Directory",
+                            Category = appNode.Category,
+                            Path = root.OriginalPath,
+                            Confidence = item.Confidence,
+                            Consistency = comp.Consistency,
+                            ProviderId = item.ProviderId,
+                            LogicalComponent = comp,
+                            DiscoveredItem = item,
+                            InclusionReason = $"Resolved filesystem root: '{root.OriginalPath}'. Volume: {root.VolumeGuid ?? "Auto"}."
+                        };
+
+                        if (selectionState != null && selectionState.TryGetValue(root.OriginalPath, out bool isRootChecked))
+                        {
+                            rootNode.IsChecked = isRootChecked;
+                        }
+
+                        compNode.AddChild(rootNode);
+                    }
+                    compNode.RecalculateCheckedState();
+                }
+                else
+                {
+                    string compKey = string.IsNullOrEmpty(comp.Id) ? $"{item.Id}:{comp.DisplayName}" : comp.Id;
+                    if (selectionState != null && selectionState.TryGetValue(compKey, out bool isCompChecked))
+                    {
+                        compNode.IsChecked = isCompChecked;
+                    }
                 }
 
                 appNode.AddChild(compNode);
+            }
+            appNode.RecalculateCheckedState();
+        }
+        else
+        {
+            if (selectionState != null && selectionState.TryGetValue(item.Id, out bool isItemChecked))
+            {
+                appNode.IsChecked = isItemChecked;
             }
         }
 
         return appNode;
     }
 
-    private static string ClassifyCategory(DiscoveredItem item)
+    public static string ClassifyCategory(DiscoveredItem item)
     {
         string cat = item.Category?.Trim() ?? string.Empty;
 

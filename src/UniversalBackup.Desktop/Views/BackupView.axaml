@@ -141,65 +141,183 @@
         </Border>
 
         <!-- ================================================================= -->
-        <!-- 3. Selection & Benchmark Toolbar                                   -->
+        <!-- 3. Selection & Presets Toolbar (2 Rows)                            -->
         <!-- ================================================================= -->
-        <Border Grid.Row="2" Margin="0,0,0,12">
-            <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,*,Auto">
-                <Button Grid.Column="0"
-                        Command="{Binding LoadTreeCommand}"
+        <StackPanel Grid.Row="2" Orientation="Vertical" Spacing="8" Margin="0,0,0,12">
+            <!-- Toolbar Row 1: Instant Selection Presets -->
+            <Border Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
+                    BorderBrush="{DynamicResource SystemControlTransientBorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    Padding="12,8">
+                <Grid ColumnDefinitions="Auto,*,Auto">
+                    <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                        <TextBlock Text="PRESETS:"
+                                   FontSize="11"
+                                   FontWeight="Bold"
+                                   Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+                                   VerticalAlignment="Center"
+                                   Margin="0,0,4,0" />
+
+                        <Button Classes="preset-chip"
+                                Classes.accent="{Binding IsPersonalEssentialsPreset}"
+                                Command="{Binding ApplyPresetCommand}"
+                                CommandParameter="Personal Essentials"
+                                ToolTip.Tip="Selects Documents, desktop files, settings, and game saves. Excludes raw install binaries.">
+                            <TextBlock Text="Personal Essentials" />
+                        </Button>
+
+                        <Button Classes="preset-chip"
+                                Classes.accent="{Binding IsGameSavesOnlyPreset}"
+                                Command="{Binding ApplyPresetCommand}"
+                                CommandParameter="Game Saves Only"
+                                ToolTip.Tip="Protects saves, configs, and screenshots across all detected game platforms.">
+                            <TextBlock Text="Game Saves Only" />
+                        </Button>
+
+                        <Button Classes="preset-chip"
+                                Classes.accent="{Binding IsGamesWithInstallationsPreset}"
+                                Command="{Binding ApplyPresetCommand}"
+                                CommandParameter="Games with Installations"
+                                ToolTip.Tip="Selects entire game packages including full installation directories.">
+                            <TextBlock Text="Games with Installations" />
+                        </Button>
+
+                        <Button Classes="preset-chip"
+                                Classes.accent="{Binding IsEntireComputerPreset}"
+                                Command="{Binding ApplyPresetCommand}"
+                                CommandParameter="Entire Accessible Computer"
+                                ToolTip.Tip="Selects all local volumes, user data, and applications with safety filters applied.">
+                            <TextBlock Text="Entire Computer" />
+                        </Button>
+
+                        <Button Classes="preset-chip"
+                                Classes.accent="{Binding IsCustomPreset}"
+                                Command="{Binding ApplyPresetCommand}"
+                                CommandParameter="Custom"
+                                ToolTip.Tip="Active when individual items have been customized.">
+                            <TextBlock Text="Custom" />
+                        </Button>
+                    </StackPanel>
+
+                    <!-- Active Filter Category Pill Indicator -->
+                    <Border Grid.Column="2"
+                            Background="{DynamicResource SystemControlHighlightListLowBrush}"
+                            BorderBrush="{DynamicResource SystemControlHighlightAccentBrush}"
+                            BorderThickness="1"
+                            CornerRadius="6"
+                            Padding="10,4"
+                            VerticalAlignment="Center">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <TextBlock Text="Category:" FontSize="11" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" VerticalAlignment="Center" />
+                            <TextBlock Text="{Binding CurrentFilterCategory}" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource SystemControlHighlightAccentBrush}" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Border>
+                </Grid>
+            </Border>
+
+            <!-- Toolbar Row 2: Search Filter & Tree Actions -->
+            <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+                <!-- Search Box with Clear Button -->
+                <Grid Grid.Column="0" Margin="0,0,10,0">
+                    <TextBox Text="{Binding SearchFilterText}"
+                             Watermark="Search by title, path, extension (.sav, .json), component, or provider..."
+                             FontSize="12"
+                             Height="34"
+                             Padding="10,6,32,6"
+                             CornerRadius="6"
+                             VerticalContentAlignment="Center" />
+                    <Button Command="{Binding ClearSearchFilterCommand}"
+                            IsVisible="{Binding IsFilterActive}"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            Padding="8"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Center"
+                            Cursor="Hand"
+                            ToolTip.Tip="Clear search filter (Restore all items)">
+                        <TextBlock Text="✕" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                    </Button>
+                </Grid>
+
+                <!-- Match Count Pill -->
+                <Border Grid.Column="1"
+                        IsVisible="{Binding IsFilterActive}"
+                        Background="{DynamicResource SystemControlHighlightListLowBrush}"
+                        BorderBrush="{DynamicResource SystemControlHighlightAccentBrush}"
+                        BorderThickness="1"
+                        CornerRadius="6"
+                        Padding="8,4"
+                        VerticalAlignment="Center"
+                        Margin="0,0,10,0">
+                    <TextBlock Text="{Binding FilterMatchCountText}"
+                               FontSize="11"
+                               FontWeight="SemiBold"
+                               Foreground="{DynamicResource SystemControlHighlightAccentBrush}" />
+                </Border>
+
+                <!-- Select Visible -->
+                <Button Grid.Column="2"
+                        Command="{Binding SelectVisibleCommand}"
                         IsEnabled="{Binding !IsBusy}"
-                        Padding="12,6"
-                        Margin="0,0,8,0">
-                    <TextBlock Text="⚡ Benchmark (250k nodes)" FontSize="12" FontWeight="SemiBold" />
+                        Padding="10,6"
+                        Margin="0,0,8,0"
+                        ToolTip.Tip="Check all currently visible items in the filtered tree">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <TextBlock Text="☑" FontSize="11" FontWeight="Bold" VerticalAlignment="Center" />
+                        <TextBlock Text="Select Visible" FontSize="12" VerticalAlignment="Center" />
+                    </StackPanel>
                 </Button>
 
-                <Button Grid.Column="1"
+                <!-- Deselect Visible -->
+                <Button Grid.Column="3"
+                        Command="{Binding DeselectVisibleCommand}"
+                        IsEnabled="{Binding !IsBusy}"
+                        Padding="10,6"
+                        Margin="0,0,8,0"
+                        ToolTip.Tip="Uncheck all currently visible items in the filtered tree">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <TextBlock Text="☐" FontSize="11" FontWeight="Bold" VerticalAlignment="Center" />
+                        <TextBlock Text="Deselect Visible" FontSize="12" VerticalAlignment="Center" />
+                    </StackPanel>
+                </Button>
+
+                <!-- Select All -->
+                <Button Grid.Column="4"
                         Command="{Binding SelectAllCommand}"
                         IsEnabled="{Binding !IsBusy}"
-                        Padding="12,6"
+                        Padding="10,6"
                         Margin="0,0,8,0">
                     <TextBlock Text="Select All" FontSize="12" />
                 </Button>
 
-                <Button Grid.Column="2"
+                <!-- Clear Selection -->
+                <Button Grid.Column="5"
                         Command="{Binding ClearSelectionCommand}"
                         IsEnabled="{Binding !IsBusy}"
-                        Padding="12,6"
+                        Padding="10,6"
                         Margin="0,0,8,0">
-                    <TextBlock Text="Clear Selection" FontSize="12" />
+                    <TextBlock Text="Clear All" FontSize="12" />
                 </Button>
 
-                <Button Grid.Column="3"
+                <!-- Expand All -->
+                <Button Grid.Column="6"
                         Command="{Binding ExpandLevel1Command}"
                         IsEnabled="{Binding !IsBusy}"
-                        Padding="12,6"
-                        Margin="0,0,12,0">
+                        Padding="10,6"
+                        Margin="0,0,8,0">
                     <TextBlock Text="Expand All" FontSize="12" />
                 </Button>
 
-                <!-- Active Filter Pill Indicator -->
-                <Border Grid.Column="4"
-                        Background="{DynamicResource SystemControlHighlightListLowBrush}"
-                        BorderBrush="{DynamicResource SystemControlHighlightAccentBrush}"
-                        BorderThickness="1"
-                        CornerRadius="4"
-                        Padding="8,4"
-                        VerticalAlignment="Center">
-                    <StackPanel Orientation="Horizontal" Spacing="4">
-                        <TextBlock Text="Filter:" FontSize="11" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
-                        <TextBlock Text="{Binding CurrentFilterCategory}" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource SystemControlHighlightAccentBrush}" />
-                    </StackPanel>
-                </Border>
-
-                <!-- Activity Progress Bar -->
-                <ProgressBar Grid.Column="6"
-                             IsIndeterminate="True"
-                             IsVisible="{Binding IsBusy}"
-                             Width="160"
-                             Height="14"
-                             VerticalAlignment="Center" />
+                <!-- Benchmark (250k nodes) -->
+                <Button Grid.Column="7"
+                        Command="{Binding LoadTreeCommand}"
+                        IsEnabled="{Binding !IsBusy}"
+                        Padding="12,6">
+                    <TextBlock Text="⚡ Benchmark (250k)" FontSize="12" FontWeight="SemiBold" />
+                </Button>
             </Grid>
-        </Border>
+        </StackPanel>
 
         <!-- ================================================================= -->
         <!-- 4. Central Split View: TreeDataGrid + Contextual Details Pane      -->

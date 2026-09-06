@@ -5,5 +5,12 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <LangVersion>latest</LangVersion>
+    <!-- Prevent concurrent git status/hash queries across multi-project parallel builds from racing on .git/index -->
+    <SourceControlInformationFeatureSupported>false</SourceControlInformationFeatureSupported>
+    <DeterministicSourcePaths>false</DeterministicSourcePaths>
+    <EnableSourceControlManagerQueries>false</EnableSourceControlManagerQueries>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+    <GenerateSourceControlInformationFromSourceControlManager>false</GenerateSourceControlInformationFromSourceControlManager>
+    <RepositoryType>None</RepositoryType>
   </PropertyGroup>
 </Project>

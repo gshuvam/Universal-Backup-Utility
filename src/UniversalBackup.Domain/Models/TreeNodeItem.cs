@@ -56,6 +56,13 @@ public class TreeNodeItem : INotifyPropertyChanged
         set => SetField(ref _path, value);
     }
 
+    private string? _selectionKey;
+    public string SelectionKey
+    {
+        get => _selectionKey ?? Path;
+        set => SetField(ref _selectionKey, value);
+    }
+
     public long SizeBytes
     {
         get => _sizeBytes;
