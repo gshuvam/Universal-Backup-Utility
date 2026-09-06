@@ -170,3 +170,4 @@ public partial class ItemDetailsViewModel : ViewModelBase
         _ => portability.ToString()
     };
 }
+

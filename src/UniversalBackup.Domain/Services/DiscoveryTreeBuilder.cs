@@ -84,9 +84,8 @@ public static class DiscoveryTreeBuilder
     {
         long totalSize = item.Components.Sum(c => c.EstimatedSizeBytes ?? 0);
         string primaryPath = item.Components.FirstOrDefault()?.SourceRoots.FirstOrDefault()?.OriginalPath ?? item.Title;
-        bool hasComponents = item.Components.Count > 0;
 
-        var appNode = new TreeNodeItem(item.Title, hasComponents ? 0 : totalSize, isFolder: true, parent)
+        var appNode = new TreeNodeItem(item.Title, totalSize, isFolder: true, parent)
         {
             NodeType = "Application",
             Category = item.Category ?? ClassifyCategory(item),
@@ -97,16 +96,14 @@ public static class DiscoveryTreeBuilder
             InclusionReason = GenerateInclusionReason(item)
         };
 
-        if (hasComponents)
+        if (item.Components.Count > 0)
         {
             foreach (var comp in item.Components)
             {
                 long compSize = comp.EstimatedSizeBytes ?? 0;
                 string compPath = comp.SourceRoots.FirstOrDefault()?.OriginalPath ?? comp.DisplayName;
-                bool hasRoots = comp.SourceRoots.Count > 0;
-                long perRootSize = hasRoots ? (compSize / comp.SourceRoots.Count) : 0;
 
-                var compNode = new TreeNodeItem(comp.DisplayName, hasRoots ? 0 : compSize, isFolder: hasRoots, appNode)
+                var compNode = new TreeNodeItem(comp.DisplayName, compSize, isFolder: comp.SourceRoots.Count > 0, appNode)
                 {
                     NodeType = "Component",
                     Category = appNode.Category,
@@ -122,7 +119,7 @@ public static class DiscoveryTreeBuilder
 
                 foreach (var root in comp.SourceRoots)
                 {
-                    var rootNode = new TreeNodeItem(root.OriginalPath, perRootSize, isFolder: false, compNode)
+                    var rootNode = new TreeNodeItem(root.OriginalPath, compSize, isFolder: false, compNode)
                     {
                         NodeType = "Directory",
                         Category = appNode.Category,
