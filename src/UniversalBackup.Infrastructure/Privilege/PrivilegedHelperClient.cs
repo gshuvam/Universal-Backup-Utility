@@ -216,24 +216,28 @@ public class PrivilegedHelperClient : IPrivilegedHelperClient
 
         // 2. Search parent directory tree to find solution or project build output
         var currentDir = new DirectoryInfo(AppContext.BaseDirectory);
+        var targetFrameworks = new[] { "net10.0", "net9.0" };
         while (currentDir != null && currentDir.Exists)
         {
-            var candidateDebug = Path.Combine(currentDir.FullName, "src", "UniversalBackup.PrivilegedHelper", "bin", "Debug", "net9.0", binaryName);
-            if (File.Exists(candidateDebug))
+            foreach (var tfm in targetFrameworks)
             {
-                return Path.GetFullPath(candidateDebug);
-            }
+                var candidateDebug = Path.Combine(currentDir.FullName, "src", "UniversalBackup.PrivilegedHelper", "bin", "Debug", tfm, binaryName);
+                if (File.Exists(candidateDebug))
+                {
+                    return Path.GetFullPath(candidateDebug);
+                }
 
-            var candidateRelease = Path.Combine(currentDir.FullName, "src", "UniversalBackup.PrivilegedHelper", "bin", "Release", "net9.0", binaryName);
-            if (File.Exists(candidateRelease))
-            {
-                return Path.GetFullPath(candidateRelease);
-            }
+                var candidateRelease = Path.Combine(currentDir.FullName, "src", "UniversalBackup.PrivilegedHelper", "bin", "Release", tfm, binaryName);
+                if (File.Exists(candidateRelease))
+                {
+                    return Path.GetFullPath(candidateRelease);
+                }
 
-            var candidateDirect = Path.Combine(currentDir.FullName, "UniversalBackup.PrivilegedHelper", "bin", "Debug", "net9.0", binaryName);
-            if (File.Exists(candidateDirect))
-            {
-                return Path.GetFullPath(candidateDirect);
+                var candidateDirect = Path.Combine(currentDir.FullName, "UniversalBackup.PrivilegedHelper", "bin", "Debug", tfm, binaryName);
+                if (File.Exists(candidateDirect))
+                {
+                    return Path.GetFullPath(candidateDirect);
+                }
             }
 
             currentDir = currentDir.Parent;
