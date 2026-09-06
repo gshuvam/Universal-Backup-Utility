@@ -3,6 +3,7 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:vm="using:UniversalBackup.Desktop.ViewModels"
+             xmlns:models="using:UniversalBackup.Desktop.Models"
              mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="650"
              x:Class="UniversalBackup.Desktop.Views.DestinationsView"
              x:DataType="vm:DestinationsViewModel">
@@ -27,7 +28,7 @@
                                    FontSize="20"
                                    FontWeight="Bold"
                                    Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}" />
-                        <TextBlock Text="Manage local repository locations, removable USB backup targets, and cloud replication accounts."
+                        <TextBlock Text="Manage local repository locations, removable USB backup targets, and least-privilege cloud replication accounts."
                                    FontSize="13"
                                    Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
                     </StackPanel>
@@ -39,15 +40,19 @@
                             CornerRadius="6"
                             VerticalAlignment="Center">
                         <StackPanel Orientation="Horizontal" Spacing="8">
-                            <TextBlock Text="Check Health" FontWeight="SemiBold" />
+                            <TextBlock Text="Refresh Storage" FontWeight="SemiBold" />
                         </StackPanel>
                     </Button>
                 </Grid>
             </Border>
 
-            <!-- Destination Items -->
-            <StackPanel Spacing="16">
-                <!-- Local Destination -->
+            <!-- 1. Primary Local Repository -->
+            <StackPanel Spacing="12">
+                <TextBlock Text="Primary Local Repository"
+                           FontSize="16"
+                           FontWeight="SemiBold"
+                           Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}" />
+
                 <Border Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
                         BorderBrush="{DynamicResource SystemControlTransientBorderBrush}"
                         BorderThickness="1"
@@ -55,66 +60,202 @@
                         Padding="20">
                     <Grid ColumnDefinitions="Auto,*,Auto">
                         <PathIcon Grid.Column="0" Data="{StaticResource NavIconDestinations}"
-                                  Width="24" Height="24"
+                                  Width="26" Height="26"
                                   Foreground="{DynamicResource SystemControlHighlightAccentBrush}"
                                   VerticalAlignment="Center" />
                         <StackPanel Grid.Column="1" Margin="16,0,0,0" Spacing="4">
-                            <TextBlock Text="Primary Local Repository (Encrypted restic repo)" FontSize="15" FontWeight="Bold" />
-                            <TextBlock Text="{Binding LocalRepositoryPath}" FontSize="12" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
-                            <TextBlock Text="Status: Initialized • SQLite WAL Catalog Synchronized" FontSize="11" Foreground="#10B981" />
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                <TextBlock Text="Primary restic Repository" FontSize="15" FontWeight="Bold" />
+                                <Border Background="#10B981" CornerRadius="4" Padding="6,2" VerticalAlignment="Center">
+                                    <TextBlock Text="Encrypted" FontSize="10" FontWeight="Bold" Foreground="White" />
+                                </Border>
+                            </StackPanel>
+                            <TextBlock Text="{Binding LocalRepositoryPath}" FontSize="12" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" TextWrapping="Wrap" />
+                            <TextBlock Text="{Binding LocalRepositoryFreeSpace, StringFormat='Available Drive Space: {0}'}" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}" />
+                            <TextBlock Text="{Binding LocalRepositoryStatus}" FontSize="11" Foreground="#10B981" />
                         </StackPanel>
                         <Border Grid.Column="2" Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"
-                                CornerRadius="4" Padding="10,6" VerticalAlignment="Center">
-                            <TextBlock Text="Primary" FontWeight="SemiBold" FontSize="12" />
+                                CornerRadius="4" Padding="12,6" VerticalAlignment="Center">
+                            <TextBlock Text="Default Storage" FontWeight="SemiBold" FontSize="12" />
                         </Border>
-                    </Grid>
-                </Border>
-
-                <!-- Cloud Destination 1: Google Drive -->
-                <Border Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
-                        BorderBrush="{DynamicResource SystemControlTransientBorderBrush}"
-                        BorderThickness="1"
-                        CornerRadius="8"
-                        Padding="20">
-                    <Grid ColumnDefinitions="Auto,*,Auto">
-                        <PathIcon Grid.Column="0" Data="{StaticResource NavIconBackup}"
-                                  Width="24" Height="24"
-                                  Foreground="{DynamicResource SystemControlHighlightAccentBrush}"
-                                  VerticalAlignment="Center" />
-                        <StackPanel Grid.Column="1" Margin="16,0,0,0" Spacing="4">
-                            <TextBlock Text="Google Drive (Least-Privilege AppFolder)" FontSize="15" FontWeight="Bold" />
-                            <TextBlock Text="OAuth 2.0 PKCE • drive.file scope restricted" FontSize="12" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
-                            <TextBlock Text="{Binding GoogleDriveStatus, StringFormat='Status: {0}'}" FontSize="11" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
-                        </StackPanel>
-                        <Button Grid.Column="2" Content="Connect" VerticalAlignment="Center" Padding="14,6" />
-                    </Grid>
-                </Border>
-
-                <!-- Cloud Destination 2: OneDrive -->
-                <Border Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
-                        BorderBrush="{DynamicResource SystemControlTransientBorderBrush}"
-                        BorderThickness="1"
-                        CornerRadius="8"
-                        Padding="20">
-                    <Grid ColumnDefinitions="Auto,*,Auto">
-                        <PathIcon Grid.Column="0" Data="{StaticResource NavIconBackup}"
-                                  Width="24" Height="24"
-                                  Foreground="{DynamicResource SystemControlHighlightAccentBrush}"
-                                  VerticalAlignment="Center" />
-                        <StackPanel Grid.Column="1" Margin="16,0,0,0" Spacing="4">
-                            <TextBlock Text="Microsoft OneDrive (AppFolder)" FontSize="15" FontWeight="Bold" />
-                            <TextBlock Text="Microsoft Graph PKCE • Files.ReadWrite.AppFolder" FontSize="12" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
-                            <TextBlock Text="{Binding OneDriveStatus, StringFormat='Status: {0}'}" FontSize="11" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
-                        </StackPanel>
-                        <Button Grid.Column="2" Content="Connect" VerticalAlignment="Center" Padding="14,6" />
                     </Grid>
                 </Border>
             </StackPanel>
 
+            <!-- 2. Removable USB Drives -->
+            <StackPanel Spacing="12">
+                <Grid ColumnDefinitions="*,Auto">
+                    <TextBlock Grid.Column="0"
+                               Text="Removable &amp; External USB Drives"
+                               FontSize="16"
+                               FontWeight="SemiBold"
+                               VerticalAlignment="Center"
+                               Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}" />
+                    <Button Grid.Column="1"
+                            Command="{Binding ScanRemovableDrivesCommand}"
+                            Padding="12,6"
+                            CornerRadius="6">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <TextBlock Text="↻ Scan Drives" FontSize="12" FontWeight="SemiBold" />
+                        </StackPanel>
+                    </Button>
+                </Grid>
+
+                <!-- Removable Drives ItemsControl -->
+                <ItemsControl ItemsSource="{Binding RemovableDrives}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="models:StorageDestinationItem">
+                            <Border Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
+                                    BorderBrush="{DynamicResource SystemControlTransientBorderBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="8"
+                                    Padding="16"
+                                    Margin="0,0,0,10">
+                                <Grid ColumnDefinitions="Auto,*,Auto">
+                                    <PathIcon Grid.Column="0" Data="{StaticResource IconFolderNetwork}"
+                                              Width="24" Height="24"
+                                              Foreground="{DynamicResource SystemControlHighlightAccentBrush}"
+                                              VerticalAlignment="Center" />
+                                    <StackPanel Grid.Column="1" Margin="16,0,0,0" Spacing="4">
+                                        <TextBlock Text="{Binding Name}" FontSize="14" FontWeight="Bold" />
+                                        <TextBlock Text="{Binding PathOrIdentifier}" FontSize="12" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                                        <TextBlock Text="{Binding FreeSpaceText}" FontSize="11" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                                        <Border Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"
+                                                CornerRadius="4" Padding="8,4">
+                                            <TextBlock Text="{Binding BadgeText}" FontSize="11" FontWeight="SemiBold" />
+                                        </Border>
+                                        <Button Content="Initialize as Target"
+                                                Command="{Binding $parent[UserControl].((vm:DestinationsViewModel)DataContext).InitializeRemovableTargetCommand}"
+                                                CommandParameter="{Binding .}"
+                                                Padding="10,6"
+                                                FontSize="12"
+                                                CornerRadius="4" />
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+                <!-- Empty State if no removable drives -->
+                <Border IsVisible="{Binding !HasRemovableDrives}"
+                        Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
+                        BorderBrush="{DynamicResource SystemControlTransientBorderBrush}"
+                        BorderThickness="1"
+                        CornerRadius="8"
+                        Padding="24">
+                    <StackPanel Spacing="8" HorizontalAlignment="Center">
+                        <TextBlock Text="No external USB drives or removable media detected."
+                                   FontSize="13"
+                                   FontWeight="Medium"
+                                   HorizontalAlignment="Center"
+                                   Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                        <TextBlock Text="Insert a portable external hard drive or USB thumb drive and click 'Scan Drives' to use as an off-site secondary destination."
+                                   FontSize="11"
+                                   HorizontalAlignment="Center"
+                                   Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+
+            <!-- 3. Cloud Storage Connections (Least-Privilege) -->
+            <StackPanel Spacing="12">
+                <TextBlock Text="Cloud Replication Providers (Least-Privilege)"
+                           FontSize="16"
+                           FontWeight="SemiBold"
+                           Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}" />
+
+                <StackPanel Spacing="12">
+                    <!-- Google Drive -->
+                    <Border Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
+                            BorderBrush="{DynamicResource SystemControlTransientBorderBrush}"
+                            BorderThickness="1"
+                            CornerRadius="8"
+                            Padding="20">
+                        <Grid ColumnDefinitions="Auto,*,Auto">
+                            <PathIcon Grid.Column="0" Data="{StaticResource NavIconBackup}"
+                                      Width="24" Height="24"
+                                      Foreground="{DynamicResource SystemControlHighlightAccentBrush}"
+                                      VerticalAlignment="Center" />
+                            <StackPanel Grid.Column="1" Margin="16,0,0,0" Spacing="4">
+                                <StackPanel Orientation="Horizontal" Spacing="10">
+                                    <TextBlock Text="Google Drive" FontSize="15" FontWeight="Bold" />
+                                    <Border Background="#3B82F6" CornerRadius="4" Padding="6,2" VerticalAlignment="Center">
+                                        <TextBlock Text="drive.file scope" FontSize="10" FontWeight="Bold" Foreground="White" />
+                                    </Border>
+                                </StackPanel>
+                                <TextBlock Text="RFC 7636 PKCE loopback authentication • Restricted solely to application created files."
+                                           FontSize="12" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                                <TextBlock Text="{Binding GoogleDriveStatus}"
+                                           FontSize="11"
+                                           FontWeight="SemiBold"
+                                           Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}" />
+                            </StackPanel>
+                            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                <Button Content="Connect"
+                                        Command="{Binding ConnectGoogleDriveCommand}"
+                                        IsVisible="{Binding !IsGoogleDriveConnected}"
+                                        Classes="accent"
+                                        Padding="14,6"
+                                        CornerRadius="4" />
+                                <Button Content="Disconnect"
+                                        Command="{Binding DisconnectGoogleDriveCommand}"
+                                        IsVisible="{Binding IsGoogleDriveConnected}"
+                                        Padding="14,6"
+                                        CornerRadius="4" />
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
+                    <!-- OneDrive -->
+                    <Border Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
+                            BorderBrush="{DynamicResource SystemControlTransientBorderBrush}"
+                            BorderThickness="1"
+                            CornerRadius="8"
+                            Padding="20">
+                        <Grid ColumnDefinitions="Auto,*,Auto">
+                            <PathIcon Grid.Column="0" Data="{StaticResource NavIconBackup}"
+                                      Width="24" Height="24"
+                                      Foreground="{DynamicResource SystemControlHighlightAccentBrush}"
+                                      VerticalAlignment="Center" />
+                            <StackPanel Grid.Column="1" Margin="16,0,0,0" Spacing="4">
+                                <StackPanel Orientation="Horizontal" Spacing="10">
+                                    <TextBlock Text="Microsoft OneDrive" FontSize="15" FontWeight="Bold" />
+                                    <Border Background="#8B5CF6" CornerRadius="4" Padding="6,2" VerticalAlignment="Center">
+                                        <TextBlock Text="AppFolder scope" FontSize="10" FontWeight="Bold" Foreground="White" />
+                                    </Border>
+                                </StackPanel>
+                                <TextBlock Text="Microsoft Graph isolated AppFolder scope • Zero access to personal OneDrive files."
+                                           FontSize="12" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                                <TextBlock Text="{Binding OneDriveStatus}"
+                                           FontSize="11"
+                                           FontWeight="SemiBold"
+                                           Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}" />
+                            </StackPanel>
+                            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                <Button Content="Connect"
+                                        Command="{Binding ConnectOneDriveCommand}"
+                                        IsVisible="{Binding !IsOneDriveConnected}"
+                                        Classes="accent"
+                                        Padding="14,6"
+                                        CornerRadius="4" />
+                                <Button Content="Disconnect"
+                                        Command="{Binding DisconnectOneDriveCommand}"
+                                        IsVisible="{Binding IsOneDriveConnected}"
+                                        Padding="14,6"
+                                        CornerRadius="4" />
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+                </StackPanel>
+            </StackPanel>
+
+            <!-- Status Banner -->
             <TextBlock Text="{Binding StatusMessage}"
                        FontSize="12"
                        Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
         </StackPanel>
     </ScrollViewer>
 </UserControl>
-

@@ -3,12 +3,13 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:vm="using:UniversalBackup.Desktop.ViewModels"
+             xmlns:models="using:UniversalBackup.Desktop.Models"
              mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="650"
              x:Class="UniversalBackup.Desktop.Views.ActivityView"
              x:DataType="vm:ActivityViewModel">
 
     <ScrollViewer VerticalScrollBarVisibility="Auto">
-        <StackPanel Spacing="24" Margin="32">
+        <StackPanel Spacing="20" Margin="32">
             <!-- Header Card -->
             <Border Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
                     BorderBrush="{DynamicResource SystemControlTransientBorderBrush}"
@@ -32,66 +33,167 @@
                                    Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
                     </StackPanel>
 
-                    <Button Grid.Column="2"
-                            Command="{Binding RefreshLogsCommand}"
-                            Classes="accent"
-                            Padding="16,8"
-                            CornerRadius="6"
-                            VerticalAlignment="Center">
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <TextBlock Text="Refresh Logs" FontWeight="SemiBold" />
-                        </StackPanel>
-                    </Button>
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                        <Button Command="{Binding RefreshLogsCommand}"
+                                Padding="12,8"
+                                CornerRadius="6">
+                            <TextBlock Text="↻ Refresh" FontWeight="SemiBold" FontSize="12" />
+                        </Button>
+                        <Button Command="{Binding RunVerificationDrillCommand}"
+                                Classes="accent"
+                                Padding="16,8"
+                                CornerRadius="6"
+                                IsEnabled="{Binding !IsDrillRunning}">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <TextBlock Text="⚡ Run Verification Drill" FontWeight="SemiBold" FontSize="12" />
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
                 </Grid>
             </Border>
 
-            <!-- Activity List Placeholder / History Cards -->
-            <StackPanel Spacing="12">
-                <Border Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
+            <!-- Search and Filter Bar -->
+            <Grid ColumnDefinitions="*,16,160">
+                <TextBox Grid.Column="0"
+                         Text="{Binding SearchQuery}"
+                         Watermark="Search activity by title, receipt ID, or log text..."
+                         Padding="12,8"
+                         CornerRadius="6" />
+
+                <ComboBox Grid.Column="2"
+                          ItemsSource="{Binding StatusFilters}"
+                          SelectedItem="{Binding SelectedStatusFilter}"
+                          HorizontalAlignment="Stretch"
+                          CornerRadius="6" />
+            </Grid>
+
+            <!-- Master-Detail Layout (2 Columns) -->
+            <Grid ColumnDefinitions="*,16,360" MinHeight="380">
+                <!-- Left: Log History Items List -->
+                <Border Grid.Column="0"
+                        Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
                         BorderBrush="{DynamicResource SystemControlTransientBorderBrush}"
                         BorderThickness="1"
                         CornerRadius="8"
-                        Padding="16">
-                    <Grid ColumnDefinitions="Auto,*,Auto">
-                        <Border Grid.Column="0" Background="#10B981" CornerRadius="4" Width="8" Margin="0,0,16,0" />
-                        <StackPanel Grid.Column="1" Spacing="4">
-                            <TextBlock Text="Backup Job: Daily Gamer Protection" FontSize="14" FontWeight="Bold" />
-                            <TextBlock Text="Completed successfully in 4.2s • 1,420 files scanned, 4.2 GB processed • VSS snapshot verified"
-                                       FontSize="12" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
-                            <TextBlock Text="Receipt ID: rcpt-9a4f-01 • Zero omissions" FontSize="11" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                        Padding="12">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="450">
+                        <StackPanel Spacing="8">
+                            <ItemsControl ItemsSource="{Binding FilteredLogs}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="models:ActivityLogItemViewModel">
+                                        <Button Command="{Binding $parent[UserControl].((vm:ActivityViewModel)DataContext).SelectLogCommand}"
+                                                CommandParameter="{Binding .}"
+                                                Classes="category-card"
+                                                Padding="12,10"
+                                                Margin="0,0,0,6">
+                                            <Grid ColumnDefinitions="Auto,*,Auto">
+                                                <!-- Status Color Bar -->
+                                                <Border Grid.Column="0"
+                                                        Background="{Binding StatusBadgeColor}"
+                                                        CornerRadius="3"
+                                                        Width="6"
+                                                        Margin="0,0,12,0" />
+
+                                                <!-- Log Title and Subtitle -->
+                                                <StackPanel Grid.Column="1" Spacing="3">
+                                                    <TextBlock Text="{Binding Title}" FontSize="13" FontWeight="Bold" />
+                                                    <TextBlock Text="{Binding FormattedTimestamp, StringFormat='Captured {0}'}"
+                                                               FontSize="11" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                                                    <TextBlock Text="{Binding BytesTransferredText, StringFormat='Transferred {0}'}"
+                                                               FontSize="11" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                                                </StackPanel>
+
+                                                <!-- Status Pill -->
+                                                <StackPanel Grid.Column="2" VerticalAlignment="Center" HorizontalAlignment="Right" Spacing="4">
+                                                    <Border Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"
+                                                            CornerRadius="4" Padding="8,3">
+                                                        <TextBlock Text="{Binding Status}" FontSize="11" FontWeight="SemiBold" />
+                                                    </Border>
+                                                    <TextBlock Text="{Binding DurationText}" FontSize="10" HorizontalAlignment="Right" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                                                </StackPanel>
+                                            </Grid>
+                                        </Button>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
+                            <!-- Empty Filtered Results -->
+                            <TextBlock Text="No activity matching your search filter."
+                                       IsVisible="{Binding !FilteredLogs.Count}"
+                                       HorizontalAlignment="Center"
+                                       Margin="0,20,0,0"
+                                       FontSize="12"
+                                       Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
                         </StackPanel>
-                        <TextBlock Grid.Column="2" Text="Today, 10:00 PM"
-                                   VerticalAlignment="Center"
-                                   FontSize="12"
-                                   Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
-                    </Grid>
+                    </ScrollViewer>
                 </Border>
 
-                <Border Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
+                <!-- Right: Audit Inspector Pane -->
+                <Border Grid.Column="2"
+                        Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
                         BorderBrush="{DynamicResource SystemControlTransientBorderBrush}"
                         BorderThickness="1"
                         CornerRadius="8"
-                        Padding="16">
-                    <Grid ColumnDefinitions="Auto,*,Auto">
-                        <Border Grid.Column="0" Background="#10B981" CornerRadius="4" Width="8" Margin="0,0,16,0" />
-                        <StackPanel Grid.Column="1" Spacing="4">
-                            <TextBlock Text="Integrity Verification Drill (Level 2)" FontSize="14" FontWeight="Bold" />
-                            <TextBlock Text="Read data subset: 100% chunks matched • Zero corruption detected"
-                                       FontSize="12" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
-                            <TextBlock Text="Catalog state: WAL synchronized" FontSize="11" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
-                        </StackPanel>
-                        <TextBlock Grid.Column="2" Text="Yesterday, 03:15 AM"
-                                   VerticalAlignment="Center"
-                                   FontSize="12"
-                                   Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
-                    </Grid>
-                </Border>
-            </StackPanel>
+                        Padding="20">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <StackPanel Spacing="16" IsVisible="{Binding HasSelectedLog}">
+                            <!-- Inspector Header -->
+                            <StackPanel Spacing="4">
+                                <TextBlock Text="Audit Inspection"
+                                           FontSize="12"
+                                           FontWeight="SemiBold"
+                                           Foreground="{DynamicResource SystemControlHighlightAccentBrush}" />
+                                <TextBlock Text="{Binding SelectedLog.Title}"
+                                           FontSize="16"
+                                           FontWeight="Bold"
+                                           TextWrapping="Wrap" />
+                            </StackPanel>
 
+                            <!-- Key Metrics Grid -->
+                            <Grid ColumnDefinitions="120,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto" Margin="0,4,0,0">
+                                <TextBlock Grid.Row="0" Grid.Column="0" Text="Status:" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6" />
+                                <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding SelectedLog.Status}" FontSize="12" Foreground="{Binding SelectedLog.StatusBadgeColor}" FontWeight="Bold" Margin="0,0,0,6" />
+
+                                <TextBlock Grid.Row="1" Grid.Column="0" Text="Start Time:" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6" />
+                                <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding SelectedLog.FormattedTimestamp}" FontSize="12" Margin="0,0,0,6" />
+
+                                <TextBlock Grid.Row="2" Grid.Column="0" Text="Duration:" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6" />
+                                <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding SelectedLog.DurationText}" FontSize="12" Margin="0,0,0,6" />
+
+                                <TextBlock Grid.Row="3" Grid.Column="0" Text="Files Captured:" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6" />
+                                <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding SelectedLog.FilesProcessed}" FontSize="12" Margin="0,0,0,6" />
+
+                                <TextBlock Grid.Row="4" Grid.Column="0" Text="Transferred:" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6" />
+                                <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding SelectedLog.BytesTransferredText}" FontSize="12" Margin="0,0,0,6" />
+
+                                <TextBlock Grid.Row="5" Grid.Column="0" Text="Receipt ID:" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6" />
+                                <TextBlock Grid.Row="5" Grid.Column="1" Text="{Binding SelectedLog.ReceiptId}" FontSize="11" Margin="0,0,0,6" TextTrimming="CharacterEllipsis" />
+
+                                <TextBlock Grid.Row="6" Grid.Column="0" Text="Consistency:" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6" />
+                                <TextBlock Grid.Row="6" Grid.Column="1" Text="{Binding SelectedLog.ConsistencyClass}" FontSize="12" Margin="0,0,0,6" />
+                            </Grid>
+
+                            <!-- Log Excerpt Box -->
+                            <StackPanel Spacing="6">
+                                <TextBlock Text="Journal Log Excerpt" FontSize="12" FontWeight="SemiBold" />
+                                <Border Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"
+                                        CornerRadius="6"
+                                        Padding="12">
+                                    <TextBlock Text="{Binding SelectedLog.LogDetails}"
+                                               FontSize="11"
+                                               FontFamily="Consolas,Menlo,Monospace"
+                                               TextWrapping="Wrap" />
+                                </Border>
+                            </StackPanel>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Border>
+            </Grid>
+
+            <!-- Status Banner -->
             <TextBlock Text="{Binding StatusMessage}"
                        FontSize="12"
                        Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
         </StackPanel>
     </ScrollViewer>
 </UserControl>
-

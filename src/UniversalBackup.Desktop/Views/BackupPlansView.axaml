@@ -3,6 +3,7 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:vm="using:UniversalBackup.Desktop.ViewModels"
+             xmlns:models="using:UniversalBackup.Desktop.Models"
              mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="650"
              x:Class="UniversalBackup.Desktop.Views.BackupPlansView"
              x:DataType="vm:BackupPlansViewModel">
@@ -27,7 +28,7 @@
                                    FontSize="20"
                                    FontWeight="Bold"
                                    Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}" />
-                        <TextBlock Text="Configure OS Task Scheduler and systemd background schedules, retention rules, and gaming suppression."
+                        <TextBlock Text="Configure OS Task Scheduler and systemd background profiles, retention rules, and gaming suppression."
                                    FontSize="13"
                                    Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
                     </StackPanel>
@@ -45,69 +46,166 @@
                 </Grid>
             </Border>
 
-            <!-- Plan Cards -->
+            <!-- Plan Builder Card (Visible when creating a new plan) -->
+            <Border IsVisible="{Binding IsCreatingNewPlan}"
+                    Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
+                    BorderBrush="{DynamicResource SystemControlHighlightAccentBrush}"
+                    BorderThickness="1"
+                    CornerRadius="12"
+                    Padding="24">
+                <StackPanel Spacing="16">
+                    <TextBlock Text="Create New Scheduled Backup Plan"
+                               FontSize="17"
+                               FontWeight="Bold"
+                               Foreground="{DynamicResource SystemControlHighlightAccentBrush}" />
+
+                    <!-- Form Grid -->
+                    <Grid ColumnDefinitions="140,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto" Margin="0,4,0,0">
+                        <!-- Plan Name -->
+                        <TextBlock Grid.Row="0" Grid.Column="0" Text="Plan Name:" VerticalAlignment="Center" FontWeight="SemiBold" FontSize="13" />
+                        <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding NewPlanName}" Watermark="e.g., Nightly Save Protection" Margin="0,4,0,10" />
+
+                        <!-- Preset -->
+                        <TextBlock Grid.Row="1" Grid.Column="0" Text="Backup Preset:" VerticalAlignment="Center" FontWeight="SemiBold" FontSize="13" />
+                        <ComboBox Grid.Row="1" Grid.Column="1"
+                                  ItemsSource="{Binding AvailablePresets}"
+                                  SelectedItem="{Binding SelectedPreset}"
+                                  HorizontalAlignment="Stretch"
+                                  Margin="0,4,0,10" />
+
+                        <!-- Frequency -->
+                        <TextBlock Grid.Row="2" Grid.Column="0" Text="Frequency:" VerticalAlignment="Center" FontWeight="SemiBold" FontSize="13" />
+                        <Grid Grid.Row="2" Grid.Column="1" ColumnDefinitions="*,16,140" Margin="0,4,0,10">
+                            <ComboBox Grid.Column="0"
+                                      ItemsSource="{Binding AvailableFrequencies}"
+                                      SelectedItem="{Binding SelectedScheduleFrequency}"
+                                      HorizontalAlignment="Stretch" />
+                            <TextBox Grid.Column="2" Text="{Binding ScheduledTime}" Watermark="22:00" />
+                        </Grid>
+
+                        <!-- Retention -->
+                        <TextBlock Grid.Row="3" Grid.Column="0" Text="Retention Rules:" VerticalAlignment="Center" FontWeight="SemiBold" FontSize="13" />
+                        <Grid Grid.Row="3" Grid.Column="1" ColumnDefinitions="*,*,*" Margin="0,4,0,10">
+                            <StackPanel Grid.Column="0" Margin="0,0,8,0">
+                                <TextBlock Text="Keep Daily" FontSize="11" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                                <NumericUpDown Value="{Binding KeepDailyCount}" Minimum="1" Maximum="365" FormatString="0" />
+                            </StackPanel>
+                            <StackPanel Grid.Column="1" Margin="4,0,4,0">
+                                <TextBlock Text="Keep Weekly" FontSize="11" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                                <NumericUpDown Value="{Binding KeepWeeklyCount}" Minimum="1" Maximum="104" FormatString="0" />
+                            </StackPanel>
+                            <StackPanel Grid.Column="2" Margin="8,0,0,0">
+                                <TextBlock Text="Keep Monthly" FontSize="11" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                                <NumericUpDown Value="{Binding KeepMonthlyCount}" Minimum="1" Maximum="60" FormatString="0" />
+                            </StackPanel>
+                        </Grid>
+
+                        <!-- Options -->
+                        <TextBlock Grid.Row="4" Grid.Column="0" Text="Options:" VerticalAlignment="Center" FontWeight="SemiBold" FontSize="13" />
+                        <StackPanel Grid.Row="4" Grid.Column="1" Orientation="Horizontal" Spacing="24" Margin="0,4,0,10">
+                            <CheckBox IsChecked="{Binding EnableVss}" Content="Enable VSS (Volume Shadow Copy)" />
+                            <CheckBox IsChecked="{Binding SuppressDuringGaming}" Content="Pause while games are active" />
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- Error Text -->
+                    <TextBlock Text="{Binding BuilderErrorMessage}"
+                               IsVisible="{Binding !!BuilderErrorMessage.Length}"
+                               Foreground="#EF4444"
+                               FontSize="12"
+                               FontWeight="SemiBold" />
+
+                    <!-- Actions -->
+                    <StackPanel Orientation="Horizontal" Spacing="12" HorizontalAlignment="Right">
+                        <Button Content="Cancel" Command="{Binding CancelNewPlanCommand}" Padding="16,8" CornerRadius="6" />
+                        <Button Content="Save Plan" Command="{Binding SaveNewPlanCommand}" Classes="accent" Padding="20,8" CornerRadius="6" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <!-- Configured Plans List -->
             <StackPanel Spacing="12">
-                <!-- Plan 1 -->
-                <Border Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
-                        BorderBrush="{DynamicResource SystemControlTransientBorderBrush}"
-                        BorderThickness="1"
-                        CornerRadius="8"
-                        Padding="20">
-                    <Grid ColumnDefinitions="*,Auto">
-                        <StackPanel Spacing="6">
-                            <StackPanel Orientation="Horizontal" Spacing="8">
-                                <TextBlock Text="Daily Gamer Protection" FontSize="16" FontWeight="Bold" />
-                                <Border Background="{DynamicResource SystemControlHighlightAccentBrush}"
-                                        CornerRadius="4" Padding="6,2">
-                                    <TextBlock Text="Active" FontSize="11" FontWeight="Bold" Foreground="White" />
-                                </Border>
-                            </StackPanel>
-                            <TextBlock Text="Runs daily at 10:00 PM • Suppressed when fullscreen games are running."
-                                       FontSize="12" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
-                            <TextBlock Text="Sources: Steam saves, Epic manifests, Minecraft, AppData game saves."
-                                       FontSize="12" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
-                        </StackPanel>
+                <TextBlock Text="Configured Backup Profiles"
+                           FontSize="16"
+                           FontWeight="SemiBold"
+                           Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}" />
 
-                        <TextBlock Grid.Column="1" Text="Keep 14 daily"
-                                   VerticalAlignment="Center"
-                                   FontWeight="SemiBold"
-                                   Foreground="{DynamicResource SystemControlHighlightAccentBrush}" />
-                    </Grid>
-                </Border>
+                <ItemsControl ItemsSource="{Binding ConfiguredPlans}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="models:BackupPlanItemViewModel">
+                            <Border Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
+                                    BorderBrush="{DynamicResource SystemControlTransientBorderBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="8"
+                                    Padding="20"
+                                    Margin="0,0,0,12">
+                                <Grid ColumnDefinitions="*,Auto">
+                                    <StackPanel Spacing="6">
+                                        <StackPanel Orientation="Horizontal" Spacing="10">
+                                            <TextBlock Text="{Binding Name}" FontSize="16" FontWeight="Bold" />
+                                            <!-- Status Pill -->
+                                            <Border Background="{DynamicResource SystemControlHighlightAccentBrush}"
+                                                    IsVisible="{Binding IsActive}"
+                                                    CornerRadius="4" Padding="6,2" VerticalAlignment="Center">
+                                                <TextBlock Text="Active" FontSize="10" FontWeight="Bold" Foreground="White" />
+                                            </Border>
+                                            <Border Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"
+                                                    IsVisible="{Binding !IsActive}"
+                                                    CornerRadius="4" Padding="6,2" VerticalAlignment="Center">
+                                                <TextBlock Text="Paused" FontSize="10" FontWeight="SemiBold" />
+                                            </Border>
+                                            <!-- Preset Tag -->
+                                            <Border Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"
+                                                    CornerRadius="4" Padding="8,2" VerticalAlignment="Center">
+                                                <TextBlock Text="{Binding PresetName}" FontSize="11" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                                            </Border>
+                                        </StackPanel>
 
-                <!-- Plan 2 -->
-                <Border Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
-                        BorderBrush="{DynamicResource SystemControlTransientBorderBrush}"
-                        BorderThickness="1"
-                        CornerRadius="8"
-                        Padding="20">
-                    <Grid ColumnDefinitions="*,Auto">
-                        <StackPanel Spacing="6">
-                            <StackPanel Orientation="Horizontal" Spacing="8">
-                                <TextBlock Text="Weekly Full Workstation" FontSize="16" FontWeight="Bold" />
-                                <Border Background="{DynamicResource SystemControlHighlightAccentBrush}"
-                                        CornerRadius="4" Padding="6,2">
-                                    <TextBlock Text="Active" FontSize="11" FontWeight="Bold" Foreground="White" />
-                                </Border>
-                            </StackPanel>
-                            <TextBlock Text="Runs every Sunday at 02:00 AM • VSS Filesystem consistency enabled."
-                                       FontSize="12" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
-                            <TextBlock Text="Sources: Documents, Photos, Developer Repositories, Desktop Settings, Browsers."
-                                       FontSize="12" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
-                        </StackPanel>
+                                        <TextBlock Text="{Binding ScheduleDescription, StringFormat='Schedule: {0}'}"
+                                                   FontSize="12" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                                        <TextBlock Text="{Binding RetentionSummary, StringFormat='Retention: {0}'}"
+                                                   FontSize="12" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
 
-                        <TextBlock Grid.Column="1" Text="Keep 8 weekly"
-                                   VerticalAlignment="Center"
-                                   FontWeight="SemiBold"
-                                   Foreground="{DynamicResource SystemControlHighlightAccentBrush}" />
-                    </Grid>
-                </Border>
+                                        <!-- Safeguards Badges -->
+                                        <StackPanel Orientation="Horizontal" Spacing="12" Margin="0,4,0,0">
+                                            <TextBlock Text="✓ VSS Enabled" IsVisible="{Binding EnableVss}" FontSize="11" Foreground="#10B981" />
+                                            <TextBlock Text="✓ Gaming Suppressed" IsVisible="{Binding SuppressDuringGaming}" FontSize="11" Foreground="#3B82F6" />
+                                        </StackPanel>
+                                    </StackPanel>
+
+                                    <!-- Plan Action Buttons -->
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                                        <Button Content="Run Now"
+                                                Command="{Binding $parent[UserControl].((vm:BackupPlansViewModel)DataContext).RunPlanNowCommand}"
+                                                CommandParameter="{Binding .}"
+                                                Classes="accent"
+                                                Padding="12,6"
+                                                FontSize="12"
+                                                CornerRadius="4" />
+                                        <Button Content="Toggle"
+                                                Command="{Binding $parent[UserControl].((vm:BackupPlansViewModel)DataContext).TogglePlanActiveCommand}"
+                                                CommandParameter="{Binding .}"
+                                                Padding="10,6"
+                                                FontSize="12"
+                                                CornerRadius="4" />
+                                        <Button Content="Delete"
+                                                Command="{Binding $parent[UserControl].((vm:BackupPlansViewModel)DataContext).DeletePlanCommand}"
+                                                CommandParameter="{Binding .}"
+                                                Padding="10,6"
+                                                FontSize="12"
+                                                CornerRadius="4" />
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
             </StackPanel>
 
+            <!-- Status Banner -->
             <TextBlock Text="{Binding StatusMessage}"
                        FontSize="12"
                        Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
         </StackPanel>
     </ScrollViewer>
 </UserControl>
-

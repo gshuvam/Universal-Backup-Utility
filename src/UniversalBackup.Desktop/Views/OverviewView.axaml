@@ -42,18 +42,24 @@
                                    Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
                     </StackPanel>
 
-                    <!-- Quick Action Button -->
-                    <Button Grid.Column="2"
-                            Command="{Binding GoToBackupCommand}"
-                            Classes="accent"
-                            Padding="20,10"
-                            VerticalAlignment="Center"
-                            CornerRadius="6">
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <PathIcon Data="{StaticResource NavIconBackup}" Width="16" Height="16" />
-                            <TextBlock Text="Back up now" FontWeight="SemiBold" />
-                        </StackPanel>
-                    </Button>
+                    <!-- Quick Action Buttons -->
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                        <Button Command="{Binding RefreshTelemetryCommand}"
+                                Padding="12,10"
+                                CornerRadius="6"
+                                ToolTip.Tip="Refresh Catalog Telemetry">
+                            <TextBlock Text="↻ Refresh" FontWeight="SemiBold" />
+                        </Button>
+                        <Button Command="{Binding GoToBackupCommand}"
+                                Classes="accent"
+                                Padding="20,10"
+                                CornerRadius="6">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <PathIcon Data="{StaticResource NavIconBackup}" Width="16" Height="16" />
+                                <TextBlock Text="Back up now" FontWeight="SemiBold" />
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
                 </Grid>
             </Border>
 
