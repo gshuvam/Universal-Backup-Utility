@@ -1,6 +1,7 @@
 # Universal Backup Utility - Git Index Auto-Repair
 # Resolves Windows file-locking truncation: "fatal: .git/index: index file smaller than expected"
 
+$env:GIT_OPTIONAL_LOCKS = "0"
 Write-Host "Checking Git repository index status..." -ForegroundColor Cyan
 
 if (Test-Path .git/index.lock) {
