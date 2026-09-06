@@ -99,3 +99,4 @@ public partial class CategoryCardModel : ObservableObject
         return $"{len:0.##} {units[order]}";
     }
 }
+
