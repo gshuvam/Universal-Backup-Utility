@@ -3,19 +3,22 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:vm="using:UniversalBackup.Desktop.ViewModels"
-             mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="650"
+             xmlns:models="using:UniversalBackup.Desktop.Models"
+             mc:Ignorable="d" d:DesignWidth="1050" d:DesignHeight="780"
              x:Class="UniversalBackup.Desktop.Views.BackupView"
              x:DataType="vm:BackupViewModel">
 
-    <Grid RowDefinitions="Auto,Auto,*,Auto" Margin="24">
+    <Grid RowDefinitions="Auto,Auto,Auto,*,Auto" Margin="24">
 
-        <!-- 1. Telemetry & Metrics Header -->
+        <!-- ================================================================= -->
+        <!-- 1. Header & Primary Action Bar                                     -->
+        <!-- ================================================================= -->
         <Border Grid.Row="0"
                 Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
                 BorderBrush="{DynamicResource SystemControlTransientBorderBrush}"
                 BorderThickness="1"
                 CornerRadius="8"
-                Padding="16"
+                Padding="16,14"
                 Margin="0,0,0,16">
             <Grid ColumnDefinitions="*,Auto">
                 <StackPanel Orientation="Vertical" Spacing="4">
@@ -23,102 +26,170 @@
                                FontSize="18"
                                FontWeight="Bold"
                                Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}" />
-                    <TextBlock Text="Select items to protect. Trees are virtualized and support tri-state hierarchical selection."
+                    <TextBlock Text="Select items to protect. Category cards display cached Stage 0 counts and live progressive discovery updates."
                                FontSize="12"
                                Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
                 </StackPanel>
 
                 <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
-                    <!-- Metric Badge 1: Node Count -->
+                    <!-- Overall Discovery Metric Badge -->
                     <Border Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"
+                            BorderBrush="{DynamicResource SystemControlTransientBorderBrush}"
+                            BorderThickness="1"
                             CornerRadius="6"
                             Padding="12,6">
-                        <StackPanel Orientation="Horizontal" Spacing="6">
-                            <TextBlock Text="Total Nodes:" FontSize="12" FontWeight="SemiBold" />
-                            <TextBlock Text="{Binding TotalNodesCount, StringFormat='{}{0:N0}'}"
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <TextBlock Text="Total Discovered:" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center" />
+                            <TextBlock Text="{Binding TotalDiscoveredItemsCount, StringFormat='{}{0:N0} items'}"
                                        FontSize="12"
                                        FontWeight="Bold"
-                                       Foreground="{DynamicResource SystemControlHighlightAccentBrush}" />
+                                       Foreground="{DynamicResource SystemControlHighlightAccentBrush}"
+                                       VerticalAlignment="Center" />
+                            <TextBlock Text="•" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" VerticalAlignment="Center" />
+                            <TextBlock Text="{Binding TotalDiscoveredFormattedSize}"
+                                       FontSize="12"
+                                       FontWeight="Bold"
+                                       Foreground="#10B981"
+                                       VerticalAlignment="Center" />
                         </StackPanel>
                     </Border>
 
-                    <!-- Metric Badge 2: Memory -->
-                    <Border Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"
-                            CornerRadius="6"
-                            Padding="12,6">
-                        <StackPanel Orientation="Horizontal" Spacing="6">
-                            <TextBlock Text="Allocated Memory:" FontSize="12" FontWeight="SemiBold" />
-                            <TextBlock Text="{Binding MemoryUsageMb}"
-                                       FontSize="12"
-                                       FontWeight="Bold"
-                                       Foreground="#10B981" />
+                    <!-- Primary Action: Progressive System Scan -->
+                    <Button Command="{Binding StartProgressiveScanCommand}"
+                            Classes="accent"
+                            IsEnabled="{Binding !IsBusy}"
+                            Padding="16,8">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <PathIcon Data="{StaticResource NavIconBackup}" Width="14" Height="14" />
+                            <TextBlock Text="🔍 Scan System" FontWeight="SemiBold" />
                         </StackPanel>
-                    </Border>
-
-                    <!-- Metric Badge 3: Generation Time -->
-                    <Border Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"
-                            CornerRadius="6"
-                            Padding="12,6">
-                        <StackPanel Orientation="Horizontal" Spacing="6">
-                            <TextBlock Text="Gen Time:" FontSize="12" FontWeight="SemiBold" />
-                            <TextBlock Text="{Binding GenerationTime}"
-                                       FontSize="12"
-                                       FontWeight="Bold" />
-                        </StackPanel>
-                    </Border>
+                    </Button>
                 </StackPanel>
             </Grid>
         </Border>
 
-        <!-- 2. Action Toolbar -->
+        <!-- ================================================================= -->
+        <!-- 2. Category Dashboard Cards (4x2 Uniform Grid)                     -->
+        <!-- ================================================================= -->
         <Border Grid.Row="1" Margin="0,0,0,16">
+            <ItemsControl ItemsSource="{Binding CategoryCards}">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <UniformGrid Columns="4" Rows="2" />
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="models:CategoryCardModel">
+                        <Button Classes="category-card"
+                                Command="{Binding $parent[UserControl].((vm:BackupViewModel)DataContext).SelectCategoryCommand}"
+                                CommandParameter="{Binding}"
+                                Margin="4">
+                            <Grid ColumnDefinitions="Auto,*,Auto">
+                                <!-- Category Icon Circle/Pill -->
+                                <Border Grid.Column="0"
+                                        Width="38" Height="38"
+                                        CornerRadius="8"
+                                        Background="{DynamicResource SystemControlHighlightListLowBrush}"
+                                        VerticalAlignment="Center"
+                                        Margin="0,0,12,0">
+                                    <PathIcon Data="{Binding IconGeometry}"
+                                              Width="18" Height="18"
+                                              Foreground="{DynamicResource SystemControlHighlightAccentBrush}"
+                                              HorizontalAlignment="Center"
+                                              VerticalAlignment="Center" />
+                                </Border>
+
+                                <!-- Title, Size, and Count -->
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                    <TextBlock Text="{Binding Title}"
+                                               FontSize="13"
+                                               FontWeight="Bold"
+                                               Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}"
+                                               TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Text="{Binding FormattedSize}"
+                                               FontSize="12"
+                                               FontWeight="SemiBold"
+                                               Foreground="#10B981" />
+                                    <TextBlock Text="{Binding ItemCount, StringFormat='{}{0:N0} detected'}"
+                                               FontSize="11"
+                                               Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                                </StackPanel>
+
+                                <!-- Status Badge & Spinner -->
+                                <StackPanel Grid.Column="2" VerticalAlignment="Center" HorizontalAlignment="Right" Spacing="4">
+                                    <Border Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"
+                                            BorderBrush="{DynamicResource SystemControlTransientBorderBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="4"
+                                            Padding="6,2">
+                                        <TextBlock Text="{Binding StatusBadge}"
+                                                   FontSize="10"
+                                                   FontWeight="SemiBold"
+                                                   Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                                    </Border>
+                                    <ProgressBar IsIndeterminate="True"
+                                                 IsVisible="{Binding IsScanning}"
+                                                 Height="3"
+                                                 Width="44"
+                                                 HorizontalAlignment="Right" />
+                                </StackPanel>
+                            </Grid>
+                        </Button>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </Border>
+
+        <!-- ================================================================= -->
+        <!-- 3. Selection & Virtualization Toolbar                              -->
+        <!-- ================================================================= -->
+        <Border Grid.Row="2" Margin="0,0,0,12">
             <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,*,Auto">
                 <Button Grid.Column="0"
                         Command="{Binding LoadTreeCommand}"
-                        Classes="accent"
                         IsEnabled="{Binding !IsBusy}"
-                        Padding="16,8"
+                        Padding="12,6"
                         Margin="0,0,8,0">
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                        <TextBlock Text="⚡ Load 250,000 Nodes (Benchmark)" FontWeight="SemiBold" />
-                    </StackPanel>
+                    <TextBlock Text="⚡ Benchmark (250k nodes)" FontSize="12" FontWeight="SemiBold" />
                 </Button>
 
                 <Button Grid.Column="1"
                         Command="{Binding SelectAllCommand}"
                         IsEnabled="{Binding !IsBusy}"
-                        Padding="12,8"
+                        Padding="12,6"
                         Margin="0,0,8,0">
-                    <TextBlock Text="Select All" />
+                    <TextBlock Text="Select All" FontSize="12" />
                 </Button>
 
                 <Button Grid.Column="2"
                         Command="{Binding ClearSelectionCommand}"
                         IsEnabled="{Binding !IsBusy}"
-                        Padding="12,8"
+                        Padding="12,6"
                         Margin="0,0,8,0">
-                    <TextBlock Text="Clear Selection" />
+                    <TextBlock Text="Clear Selection" FontSize="12" />
                 </Button>
 
                 <Button Grid.Column="3"
                         Command="{Binding ExpandLevel1Command}"
                         IsEnabled="{Binding !IsBusy}"
-                        Padding="12,8">
-                    <TextBlock Text="Expand Level 1" />
+                        Padding="12,6">
+                    <TextBlock Text="Expand All" FontSize="12" />
                 </Button>
 
-                <!-- Status indicator -->
+                <!-- Activity Progress Bar -->
                 <ProgressBar Grid.Column="5"
                              IsIndeterminate="True"
                              IsVisible="{Binding IsBusy}"
-                             Width="150"
-                             Height="16"
+                             Width="160"
+                             Height="14"
                              VerticalAlignment="Center" />
             </Grid>
         </Border>
 
-        <!-- 3. Central Virtualized TreeDataGrid -->
-        <Border Grid.Row="2"
+        <!-- ================================================================= -->
+        <!-- 4. Central Virtualized TreeDataGrid                                -->
+        <!-- ================================================================= -->
+        <Border Grid.Row="3"
                 Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
                 BorderBrush="{DynamicResource SystemControlTransientBorderBrush}"
                 BorderThickness="1"
@@ -128,8 +199,10 @@
                           Margin="8" />
         </Border>
 
-        <!-- 4. Bottom Status & Telemetry Bar -->
-        <Border Grid.Row="3" Margin="0,12,0,0">
+        <!-- ================================================================= -->
+        <!-- 5. Bottom Telemetry & Status Bar                                   -->
+        <!-- ================================================================= -->
+        <Border Grid.Row="4" Margin="0,12,0,0">
             <Grid ColumnDefinitions="*,Auto">
                 <TextBlock Grid.Column="0"
                            Text="{Binding StatusMessage}"
@@ -138,7 +211,7 @@
                            VerticalAlignment="Center" />
 
                 <TextBlock Grid.Column="1"
-                           Text="UI Thread: 60 FPS • Tri-state bubbling: O(log N) • Virtualization Active"
+                           Text="UI Thread: 60 FPS • Virtualization: Active • Category Cards: 8"
                            FontSize="11"
                            Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
                            VerticalAlignment="Center" />
@@ -146,4 +219,3 @@
         </Border>
     </Grid>
 </UserControl>
-
