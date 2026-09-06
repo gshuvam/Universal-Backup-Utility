@@ -47,6 +47,7 @@ public static class ServiceConfiguration
 
         // 4. Application Planning & Discovery Services
         services.AddSingleton<ISelectionPlanner, SelectionPlanner>();
+        services.AddSingleton<IBackupDescriptorService, BackupDescriptorService>();
         services.AddSingleton<IDiscoveryScanner, ProgressiveDiscoveryScanner>();
 
         // 5. Shell & Page ViewModels

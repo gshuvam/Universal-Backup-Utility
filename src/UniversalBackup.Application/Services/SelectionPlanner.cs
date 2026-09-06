@@ -1,14 +1,19 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
 using System.Runtime.InteropServices;
 using UniversalBackup.Application.Common.Interfaces;
 using UniversalBackup.Application.DTOs;
 using UniversalBackup.Domain.Enums;
+using UniversalBackup.Domain.Exceptions;
 using UniversalBackup.Domain.Models;
 
 namespace UniversalBackup.Application.Services;
 
 /// <summary>
 /// Authoritative implementation of selection evaluation, precedence hierarchy,
-/// and overlapping path resolution.
+/// source normalization, and overlapping path resolution.
 /// </summary>
 public sealed class SelectionPlanner : ISelectionPlanner
 {
@@ -198,12 +203,73 @@ public sealed class SelectionPlanner : ISelectionPlanner
     public SelectionPlan ResolveSelection(
         BackupPlan plan,
         IReadOnlyList<DiscoveredItem> discoveredItems,
-        string? destinationRepositoryPath = null)
+        string? destinationRepositoryPath = null,
+        string? stagingDirectory = null)
     {
         ArgumentNullException.ThrowIfNull(plan);
         ArgumentNullException.ThrowIfNull(discoveredItems);
 
         var warnings = new List<string>();
+
+        // Preflight: Validate all source roots against destination repository overlap
+        if (!string.IsNullOrWhiteSpace(destinationRepositoryPath))
+        {
+            string normDest = SourceRoot.NormalizePath(destinationRepositoryPath);
+            foreach (DiscoveredItem item in discoveredItems)
+            {
+                foreach (LogicalComponent component in item.Components)
+                {
+                    foreach (SourceRoot root in component.SourceRoots)
+                    {
+                        var overlap = DetectSourceDestinationOverlap(root.NormalizedPath, normDest);
+                        if (overlap.IsFatal)
+                        {
+                            throw new SourceDestinationOverlapException(
+                                root.NormalizedPath,
+                                normDest,
+                                $"Cannot resolve backup selection: {overlap.Message}");
+                        }
+                    }
+                }
+            }
+
+            foreach (SelectionRule rule in plan.Rules.Where(r => r.Type == SelectionType.Include))
+            {
+                string ruleNorm = SourceRoot.NormalizePath(rule.PathOrPattern);
+                var overlap = DetectSourceDestinationOverlap(ruleNorm, normDest);
+                if (overlap.IsFatal)
+                {
+                    throw new SourceDestinationOverlapException(
+                        ruleNorm,
+                        normDest,
+                        $"Cannot resolve backup selection: {overlap.Message}");
+                }
+            }
+        }
+
+        // Preflight: Validate against staging directory overlap
+        if (!string.IsNullOrWhiteSpace(stagingDirectory))
+        {
+            string normStaging = SourceRoot.NormalizePath(stagingDirectory);
+            foreach (DiscoveredItem item in discoveredItems)
+            {
+                foreach (LogicalComponent component in item.Components)
+                {
+                    foreach (SourceRoot root in component.SourceRoots)
+                    {
+                        var overlap = DetectSourceDestinationOverlap(root.NormalizedPath, normStaging);
+                        if (overlap.IsFatal)
+                        {
+                            throw new SourceDestinationOverlapException(
+                                root.NormalizedPath,
+                                normStaging,
+                                $"Cannot resolve backup selection: Source path '{root.NormalizedPath}' cannot reside inside or equal the utility staging directory '{normStaging}'.");
+                        }
+                    }
+                }
+            }
+        }
+
         var candidateRoots = new List<(SourceRoot Root, string ComponentId, DiscoveredItem ParentItem)>();
 
         // 1. Gather all roots from discovered items
@@ -248,9 +314,37 @@ public sealed class SelectionPlanner : ISelectionPlanner
         {
             allExclusions.Add(SourceRoot.NormalizePath(rule.PathOrPattern));
         }
+
+        // 3a. Validate Destination Repository Overlap & Loop Guards
         if (!string.IsNullOrWhiteSpace(destinationRepositoryPath))
         {
-            allExclusions.Add(SourceRoot.NormalizePath(destinationRepositoryPath));
+            string normDest = SourceRoot.NormalizePath(destinationRepositoryPath);
+            foreach (var candidate in candidateRoots)
+            {
+                var overlap = DetectSourceDestinationOverlap(candidate.Root.NormalizedPath, normDest);
+                if (overlap.RequiresExclusion)
+                {
+                    allExclusions.Add(normDest);
+                    warnings.Add($"Destination repository '{normDest}' is inside source root '{candidate.Root.NormalizedPath}'. Excluded destination path from backup payload.");
+                }
+            }
+            allExclusions.Add(normDest);
+        }
+
+        // 3b. Validate Staging Directory Exclusions
+        if (!string.IsNullOrWhiteSpace(stagingDirectory))
+        {
+            string normStaging = SourceRoot.NormalizePath(stagingDirectory);
+            foreach (var candidate in candidateRoots)
+            {
+                var overlap = DetectSourceDestinationOverlap(candidate.Root.NormalizedPath, normStaging);
+                if (overlap.RequiresExclusion)
+                {
+                    allExclusions.Add(normStaging);
+                    warnings.Add($"Staging directory '{normStaging}' is inside source root '{candidate.Root.NormalizedPath}'. Excluded staging path from backup payload.");
+                }
+            }
+            allExclusions.Add(normStaging);
         }
 
         // 4. Overlapping Path Deduplication & Redundancy Elimination
@@ -269,11 +363,13 @@ public sealed class SelectionPlanner : ISelectionPlanner
             string candidatePath = candidate.Root.NormalizedPath;
 
             // Check if this candidate is already covered by an existing root group
-            var coveringGroup = resolvedGroups.FirstOrDefault(g =>
+            var coveringGroupIndex = resolvedGroups.FindIndex(g =>
                 IsSubPathOf(candidatePath, g.Root.NormalizedPath, _platformComparison));
 
-            if (coveringGroup != null)
+            if (coveringGroupIndex >= 0)
             {
+                var coveringGroup = resolvedGroups[coveringGroupIndex];
+
                 // Verify there is no exclusion filter between coveringGroup.Root and candidatePath
                 bool isExcludedUnderParent = coveringGroup.ExclusionFilters.Any(ex =>
                     string.Equals(candidatePath, ex, _platformComparison) ||
@@ -282,6 +378,15 @@ public sealed class SelectionPlanner : ISelectionPlanner
                 if (!isExcludedUnderParent)
                 {
                     // Candidate is fully covered by parent root; associate component without duplicating root!
+                    if (!coveringGroup.AssociatedComponentIds.Contains(candidate.ComponentId))
+                    {
+                        var updatedComponentIds = new List<string>(coveringGroup.AssociatedComponentIds)
+                        {
+                            candidate.ComponentId
+                        };
+                        resolvedGroups[coveringGroupIndex] = coveringGroup with { AssociatedComponentIds = updatedComponentIds };
+                    }
+
                     if (candidate.ParentItem != null)
                     {
                         includedDiscoveredItems.Add(candidate.ParentItem);
@@ -335,6 +440,51 @@ public sealed class SelectionPlanner : ISelectionPlanner
             EstimatedSizeBytes: totalEstimatedBytes,
             EstimatedFileCount: totalEstimatedFiles,
             Warnings: warnings);
+    }
+
+    /// <inheritdoc />
+    public SourceDestinationOverlapResult DetectSourceDestinationOverlap(
+        string sourcePath,
+        string destinationRepositoryPath)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(sourcePath);
+        ArgumentException.ThrowIfNullOrWhiteSpace(destinationRepositoryPath);
+
+        string normSource = SourceRoot.NormalizePath(sourcePath);
+        string normDest = SourceRoot.NormalizePath(destinationRepositoryPath);
+
+        if (string.Equals(normSource, normDest, _platformComparison))
+        {
+            return new SourceDestinationOverlapResult(
+                SourceDestinationOverlapType.SourceEqualsDestination,
+                normSource,
+                normDest,
+                $"Fatal: Source path '{normSource}' is identical to target backup repository '{normDest}'. A backup repository cannot be its own source.");
+        }
+
+        if (IsSubPathOf(normSource, normDest, _platformComparison))
+        {
+            return new SourceDestinationOverlapResult(
+                SourceDestinationOverlapType.SourceInsideDestination,
+                normSource,
+                normDest,
+                $"Fatal: Source path '{normSource}' is located inside target backup repository '{normDest}'. Recursive self-backup loop detected.");
+        }
+
+        if (IsSubPathOf(normDest, normSource, _platformComparison))
+        {
+            return new SourceDestinationOverlapResult(
+                SourceDestinationOverlapType.DestinationInsideSource,
+                normSource,
+                normDest,
+                $"Notice: Destination repository '{normDest}' is located inside source root '{normSource}'. The repository must be strictly excluded from payload backup.");
+        }
+
+        return new SourceDestinationOverlapResult(
+            SourceDestinationOverlapType.None,
+            normSource,
+            normDest,
+            "No overlap detected between source and destination repository.");
     }
 
     /// <inheritdoc />
@@ -495,7 +645,6 @@ public sealed class SelectionPlanner : ISelectionPlanner
             return true;
         }
 
-        // Also check if any directory segment matches (e.g. System Volume Information or $Recycle.Bin)
         string[] parts = path.Split(['\\', '/'], StringSplitOptions.RemoveEmptyEntries);
         return parts.Any(p => string.Equals(p, exclusion, StringComparison.OrdinalIgnoreCase));
     }
@@ -506,4 +655,3 @@ public sealed class SelectionPlanner : ISelectionPlanner
                IsSubPathOf(path, exclusion, StringComparison.Ordinal);
     }
 }
-

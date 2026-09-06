@@ -35,7 +35,12 @@ public sealed record BackupSetDescriptor(
     IReadOnlyList<string> IncludedComponentIds,
     IReadOnlyDictionary<string, string> SourceMappings,
     string ResticVersion,
-    DateTimeOffset GeneratedAtUtc);
+    DateTimeOffset GeneratedAtUtc,
+    string? BackupSetId = null,
+    string? Sha256Checksum = null,
+    DeviceProfileInfo? DeviceProfile = null,
+    IReadOnlyList<string>? ExcludedPaths = null,
+    string? StagingPath = null);
 
 /// <summary>
 /// Represents one user-visible dated backup set independent of underlying engine snapshot IDs.
