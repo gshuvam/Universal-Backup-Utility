@@ -1,8 +1,15 @@
+using System;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
+using UniversalBackup.Domain.Enums;
 
 namespace UniversalBackup.Domain.Models;
 
+/// <summary>
+/// Hierarchical tree node model for the virtualized TreeDataGrid.
+/// Supports O(log N) tri-state bubbling, domain model associations, and contextual metadata.
+/// </summary>
 public class TreeNodeItem : INotifyPropertyChanged
 {
     private string _name;
@@ -15,6 +22,19 @@ public class TreeNodeItem : INotifyPropertyChanged
     private List<TreeNodeItem>? _children;
 
     public event PropertyChangedEventHandler? PropertyChanged;
+    public event Action<TreeNodeItem>? SelectionChanged;
+
+    // Contextual inspection properties for Right Details Pane
+    public string NodeType { get; set; } = "Directory"; // "Category", "Application", "Component", "Directory", "File"
+    public string? Category { get; set; }
+    public string? ProviderId { get; set; }
+    public DiscoveryConfidence? Confidence { get; set; }
+    public ConsistencyClass? Consistency { get; set; }
+    public ComponentPortability? Portability { get; set; }
+    public string? InclusionReason { get; set; }
+    public string? ExclusionReason { get; set; }
+    public DiscoveredItem? DiscoveredItem { get; set; }
+    public LogicalComponent? LogicalComponent { get; set; }
 
     public TreeNodeItem(string name, long sizeBytes = 0, bool isFolder = false, TreeNodeItem? parent = null)
     {
@@ -82,6 +102,7 @@ public class TreeNodeItem : INotifyPropertyChanged
 
         _isChecked = value;
         OnPropertyChanged(nameof(IsChecked));
+        NotifySelectionChanged();
 
         // 1. Cascade down to all children if explicit true or false
         if (cascadeDown && value.HasValue && _children != null && _children.Count > 0)
@@ -137,9 +158,16 @@ public class TreeNodeItem : INotifyPropertyChanged
         {
             _isChecked = newState;
             OnPropertyChanged(nameof(IsChecked));
+            NotifySelectionChanged();
 
             _parent?.RecalculateCheckedState();
         }
+    }
+
+    private void NotifySelectionChanged()
+    {
+        SelectionChanged?.Invoke(this);
+        _parent?.NotifySelectionChanged();
     }
 
     public string FormattedSize
@@ -156,6 +184,53 @@ public class TreeNodeItem : INotifyPropertyChanged
             }
             return $"{len:0.##} {suffixes[order]}";
         }
+    }
+
+    /// <summary>
+    /// Traverses the tree and calculates total selected leaf items, selected bytes, and safety warnings.
+    /// </summary>
+    public static void CalculateSelectionTotals(
+        IEnumerable<TreeNodeItem> roots,
+        out int selectedCount,
+        out long totalSizeBytes,
+        out bool hasLockedFilesWarning,
+        out bool hasOfflineCloudWarning)
+    {
+        int count = 0;
+        long bytes = 0;
+        bool lockedWarning = false;
+        bool offlineWarning = false;
+
+        void Traverse(TreeNodeItem node)
+        {
+            if (node.HasChildren)
+            {
+                foreach (var child in node.Children)
+                {
+                    Traverse(child);
+                }
+            }
+            else if (node.IsChecked == true)
+            {
+                count++;
+                bytes += node.SizeBytes;
+
+                if (node.Consistency == ConsistencyClass.FilesystemSnapshot)
+                {
+                    lockedWarning = true;
+                }
+            }
+        }
+
+        foreach (var root in roots)
+        {
+            Traverse(root);
+        }
+
+        selectedCount = count;
+        totalSizeBytes = bytes;
+        hasLockedFilesWarning = lockedWarning;
+        hasOfflineCloudWarning = offlineWarning;
     }
 
     protected void OnPropertyChanged([CallerMemberName] string? propertyName = null)

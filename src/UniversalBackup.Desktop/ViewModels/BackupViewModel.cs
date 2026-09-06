@@ -21,13 +21,14 @@ namespace UniversalBackup.Desktop.ViewModels;
 
 /// <summary>
 /// View model managing the backup configuration, progressive discovery scan,
-/// category dashboard cards, and virtualized selection tree.
+/// category dashboard cards, virtualized selection tree, and contextual details pane.
 /// </summary>
 public partial class BackupViewModel : ViewModelBase
 {
     private readonly IDiscoveryScanner? _discoveryScanner;
     private readonly ICatalogService? _catalogService;
     private CancellationTokenSource? _scanCts;
+    private readonly List<DiscoveredItem> _discoveredItems = [];
 
     [ObservableProperty]
     private ObservableCollection<CategoryCardModel> _categoryCards = [];
@@ -39,7 +40,12 @@ public partial class BackupViewModel : ViewModelBase
     private HierarchicalTreeDataGridSource<TreeNodeItem>? _treeSource;
 
     [ObservableProperty]
-    private string _statusMessage = "Ready. Click 'Scan System' or 'Load 250,000 Nodes' to begin.";
+    private TreeNodeItem? _selectedNode;
+
+    public ItemDetailsViewModel ItemDetails { get; } = new();
+
+    [ObservableProperty]
+    private string _statusMessage = "Ready. Click 'Scan System' or 'Benchmark (250k nodes)' to begin.";
 
     [ObservableProperty]
     private int _totalNodesCount;
@@ -64,6 +70,25 @@ public partial class BackupViewModel : ViewModelBase
 
     [ObservableProperty]
     private string _totalDiscoveredFormattedSize = "0 B";
+
+    // Real-time Selection Summary Bar Observables
+    [ObservableProperty]
+    private int _selectedItemsCount;
+
+    [ObservableProperty]
+    private long _selectedSizeBytes;
+
+    [ObservableProperty]
+    private string _selectedFormattedSize = "0 B";
+
+    [ObservableProperty]
+    private bool _hasLockedFilesWarning;
+
+    [ObservableProperty]
+    private bool _hasOfflineCloudWarning;
+
+    [ObservableProperty]
+    private string _currentFilterCategory = "All Files & Folders";
 
     private List<TreeNodeItem> _rootNodes = [];
 
@@ -149,21 +174,38 @@ public partial class BackupViewModel : ViewModelBase
     {
         if (card == null)
         {
+            CurrentFilterCategory = "All Files & Folders";
+            foreach (var c in CategoryCards) c.IsSelected = false;
+            SelectedCategoryCard = null;
+            RebuildLiveTree(null);
             return;
         }
 
+        bool wasSelected = card.IsSelected;
         foreach (var c in CategoryCards)
         {
-            c.IsSelected = (c == card);
+            c.IsSelected = (c == card && !wasSelected);
         }
 
-        SelectedCategoryCard = card;
-        StatusMessage = $"Filtered view to category: {card.Title} ({card.ItemCount} items, {card.FormattedSize})";
+        if (!wasSelected)
+        {
+            SelectedCategoryCard = card;
+            CurrentFilterCategory = card.Title;
+            StatusMessage = $"Filtered view to category: {card.Title} ({card.ItemCount} items, {card.FormattedSize})";
+            RebuildLiveTree(card.CategoryKey);
+        }
+        else
+        {
+            SelectedCategoryCard = null;
+            CurrentFilterCategory = "All Files & Folders";
+            StatusMessage = "Cleared category filter. Showing all files and folders.";
+            RebuildLiveTree(null);
+        }
     }
 
     /// <summary>
     /// Executes progressive discovery scanning across all stages (Stage 0 to Stage 4),
-    /// streaming discovered items into the respective category cards in real time.
+    /// streaming discovered items into the respective category cards and live selection tree.
     /// </summary>
     [RelayCommand]
     public async Task StartProgressiveScanAsync()
@@ -183,6 +225,8 @@ public partial class BackupViewModel : ViewModelBase
         _scanCts?.Cancel();
         _scanCts = new CancellationTokenSource();
         var ct = _scanCts.Token;
+
+        _discoveredItems.Clear();
 
         foreach (var card in CategoryCards)
         {
@@ -237,6 +281,7 @@ public partial class BackupViewModel : ViewModelBase
             {
                 await foreach (var item in _discoveryScanner.ScanProgressiveAsync(scanOptions, progress, ct))
                 {
+                    _discoveredItems.Add(item);
                     var card = ResolveCategoryCard(item);
                     long itemSize = item.Components.Sum(c => c.EstimatedSizeBytes ?? 0);
 
@@ -260,6 +305,7 @@ public partial class BackupViewModel : ViewModelBase
                     card.SetStatus(card.ItemCount > 0 ? "Ready" : "0 found", isScanning: false);
                 }
 
+                RebuildLiveTree(SelectedCategoryCard?.CategoryKey);
                 StatusMessage = $"Progressive scan complete: {TotalDiscoveredItemsCount:N0} items ({TotalDiscoveredFormattedSize}) discovered.";
             });
         }
@@ -275,6 +321,84 @@ public partial class BackupViewModel : ViewModelBase
         {
             IsBusy = false;
         }
+    }
+
+    /// <summary>
+    /// Rebuilds the TreeDataGrid from discovered items according to the active category filter.
+    /// </summary>
+    public void RebuildLiveTree(string? categoryFilter = null)
+    {
+        var sw = Stopwatch.StartNew();
+        _rootNodes = DiscoveryTreeBuilder.BuildTree(_discoveredItems, categoryFilter);
+
+        void HookSelection(TreeNodeItem node)
+        {
+            node.SelectionChanged += _ => RecalculateSelectionTotals();
+            if (node.HasChildren)
+            {
+                foreach (var child in node.Children)
+                {
+                    HookSelection(child);
+                }
+            }
+        }
+
+        foreach (var root in _rootNodes)
+        {
+            HookSelection(root);
+        }
+
+        var source = new HierarchicalTreeDataGridSource<TreeNodeItem>(_rootNodes)
+        {
+            Columns =
+            {
+                new HierarchicalExpanderColumn<TreeNodeItem>(
+                    new CheckBoxColumn<TreeNodeItem>(
+                        "Select",
+                        x => x.IsChecked,
+                        (item, val) => item.SetChecked(val, cascadeDown: true, bubbleUp: true)),
+                    x => x.Children,
+                    x => x.HasChildren,
+                    x => x.IsExpanded),
+                new TextColumn<TreeNodeItem, string>("Name", x => x.Name, new GridLength(240, GridUnitType.Pixel)),
+                new TextColumn<TreeNodeItem, string>("Size", x => x.FormattedSize, new GridLength(100, GridUnitType.Pixel)),
+                new TextColumn<TreeNodeItem, string>("Type", x => x.NodeType, new GridLength(90, GridUnitType.Pixel)),
+                new TextColumn<TreeNodeItem, string>("Path", x => x.Path, new GridLength(1, GridUnitType.Star))
+            }
+        };
+
+        source.RowSelection!.SingleSelect = true;
+        source.RowSelection.SelectionChanged += (_, _) =>
+        {
+            var selected = source.RowSelection.SelectedItem;
+            SelectedNode = selected;
+            ItemDetails.PopulateFromNode(selected);
+        };
+
+        TreeSource = source;
+        TotalNodesCount = CountNodesRecursive(_rootNodes);
+        GenerationTime = $"{sw.ElapsedMilliseconds} ms";
+
+        RecalculateSelectionTotals();
+    }
+
+    public void RecalculateSelectionTotals()
+    {
+        TreeNodeItem.CalculateSelectionTotals(
+            _rootNodes,
+            out int count,
+            out long bytes,
+            out bool lockedWarning,
+            out bool offlineWarning);
+
+        DispatchToUi(() =>
+        {
+            SelectedItemsCount = count;
+            SelectedSizeBytes = bytes;
+            SelectedFormattedSize = CategoryCardModel.FormatBytes(bytes);
+            HasLockedFilesWarning = lockedWarning;
+            HasOfflineCloudWarning = offlineWarning;
+        });
     }
 
     public CategoryCardModel ResolveCategoryCard(DiscoveredItem item)
@@ -370,6 +494,23 @@ public partial class BackupViewModel : ViewModelBase
         GenerationTime = $"{sw.ElapsedMilliseconds} ms";
         MemoryUsageMb = $"{(memAfter - memBefore) / (1024.0 * 1024.0):F1} MB";
 
+        void HookSelection(TreeNodeItem node)
+        {
+            node.SelectionChanged += _ => RecalculateSelectionTotals();
+            if (node.HasChildren)
+            {
+                foreach (var child in node.Children)
+                {
+                    HookSelection(child);
+                }
+            }
+        }
+
+        foreach (var root in _rootNodes)
+        {
+            HookSelection(root);
+        }
+
         var source = new HierarchicalTreeDataGridSource<TreeNodeItem>(_rootNodes)
         {
             Columns =
@@ -382,16 +523,25 @@ public partial class BackupViewModel : ViewModelBase
                     x => x.Children,
                     x => x.HasChildren,
                     x => x.IsExpanded),
-                new TextColumn<TreeNodeItem, string>("Name", x => x.Name, new GridLength(260, GridUnitType.Pixel)),
-                new TextColumn<TreeNodeItem, string>("Size", x => x.FormattedSize, new GridLength(110, GridUnitType.Pixel)),
+                new TextColumn<TreeNodeItem, string>("Name", x => x.Name, new GridLength(240, GridUnitType.Pixel)),
+                new TextColumn<TreeNodeItem, string>("Size", x => x.FormattedSize, new GridLength(100, GridUnitType.Pixel)),
                 new TextColumn<TreeNodeItem, string>("Type", x => x.IsFolder ? "Directory" : "File", new GridLength(90, GridUnitType.Pixel)),
                 new TextColumn<TreeNodeItem, string>("Path", x => x.Path, new GridLength(1, GridUnitType.Star))
             }
         };
 
+        source.RowSelection!.SingleSelect = true;
+        source.RowSelection.SelectionChanged += (_, _) =>
+        {
+            var selected = source.RowSelection.SelectedItem;
+            SelectedNode = selected;
+            ItemDetails.PopulateFromNode(selected);
+        };
+
         TreeSource = source;
         IsBusy = false;
         StatusMessage = $"Virtualized {TotalNodesCount:N0} nodes in {GenerationTime}. Memory: {MemoryUsageMb}. Tri-state bubbling ready.";
+        RecalculateSelectionTotals();
     }
 
     [RelayCommand]
@@ -401,6 +551,7 @@ public partial class BackupViewModel : ViewModelBase
         {
             root.IsChecked = true;
         }
+        RecalculateSelectionTotals();
     }
 
     [RelayCommand]
@@ -410,6 +561,7 @@ public partial class BackupViewModel : ViewModelBase
         {
             root.IsChecked = false;
         }
+        RecalculateSelectionTotals();
     }
 
     [RelayCommand]
@@ -419,5 +571,19 @@ public partial class BackupViewModel : ViewModelBase
         {
             root.IsExpanded = true;
         }
+    }
+
+    private static int CountNodesRecursive(IEnumerable<TreeNodeItem> nodes)
+    {
+        int count = 0;
+        foreach (var node in nodes)
+        {
+            count++;
+            if (node.HasChildren)
+            {
+                count += CountNodesRecursive(node.Children);
+            }
+        }
+        return count;
     }
 }

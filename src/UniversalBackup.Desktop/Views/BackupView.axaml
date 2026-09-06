@@ -4,7 +4,7 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:vm="using:UniversalBackup.Desktop.ViewModels"
              xmlns:models="using:UniversalBackup.Desktop.Models"
-             mc:Ignorable="d" d:DesignWidth="1050" d:DesignHeight="780"
+             mc:Ignorable="d" d:DesignWidth="1100" d:DesignHeight="800"
              x:Class="UniversalBackup.Desktop.Views.BackupView"
              x:DataType="vm:BackupViewModel">
 
@@ -141,10 +141,10 @@
         </Border>
 
         <!-- ================================================================= -->
-        <!-- 3. Selection & Virtualization Toolbar                              -->
+        <!-- 3. Selection & Benchmark Toolbar                                   -->
         <!-- ================================================================= -->
         <Border Grid.Row="2" Margin="0,0,0,12">
-            <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,*,Auto">
+            <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,*,Auto">
                 <Button Grid.Column="0"
                         Command="{Binding LoadTreeCommand}"
                         IsEnabled="{Binding !IsBusy}"
@@ -172,12 +172,27 @@
                 <Button Grid.Column="3"
                         Command="{Binding ExpandLevel1Command}"
                         IsEnabled="{Binding !IsBusy}"
-                        Padding="12,6">
+                        Padding="12,6"
+                        Margin="0,0,12,0">
                     <TextBlock Text="Expand All" FontSize="12" />
                 </Button>
 
+                <!-- Active Filter Pill Indicator -->
+                <Border Grid.Column="4"
+                        Background="{DynamicResource SystemControlHighlightListLowBrush}"
+                        BorderBrush="{DynamicResource SystemControlHighlightAccentBrush}"
+                        BorderThickness="1"
+                        CornerRadius="4"
+                        Padding="8,4"
+                        VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal" Spacing="4">
+                        <TextBlock Text="Filter:" FontSize="11" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                        <TextBlock Text="{Binding CurrentFilterCategory}" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource SystemControlHighlightAccentBrush}" />
+                    </StackPanel>
+                </Border>
+
                 <!-- Activity Progress Bar -->
-                <ProgressBar Grid.Column="5"
+                <ProgressBar Grid.Column="6"
                              IsIndeterminate="True"
                              IsVisible="{Binding IsBusy}"
                              Width="160"
@@ -187,35 +202,277 @@
         </Border>
 
         <!-- ================================================================= -->
-        <!-- 4. Central Virtualized TreeDataGrid                                -->
+        <!-- 4. Central Split View: TreeDataGrid + Contextual Details Pane      -->
         <!-- ================================================================= -->
-        <Border Grid.Row="3"
-                Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
-                BorderBrush="{DynamicResource SystemControlTransientBorderBrush}"
-                BorderThickness="1"
-                CornerRadius="8"
-                ClipToBounds="True">
-            <TreeDataGrid Source="{Binding TreeSource}"
-                          Margin="8" />
-        </Border>
+        <Grid Grid.Row="3" ColumnDefinitions="*,12,360">
+
+            <!-- 4.1 Left: Virtualized TreeDataGrid -->
+            <Border Grid.Column="0"
+                    Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
+                    BorderBrush="{DynamicResource SystemControlTransientBorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    ClipToBounds="True">
+                <TreeDataGrid Source="{Binding TreeSource}"
+                              Margin="8" />
+            </Border>
+
+            <!-- 4.2 Splitter Divider -->
+            <GridSplitter Grid.Column="1"
+                          Width="4"
+                          Background="Transparent"
+                          ResizeDirection="Columns" />
+
+            <!-- 4.3 Right: Contextual Inspector Details Pane Card -->
+            <Border Grid.Column="2"
+                    Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
+                    BorderBrush="{DynamicResource SystemControlTransientBorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    ClipToBounds="True">
+                <Grid>
+                    <!-- Populated State: Node Selected -->
+                    <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                  IsVisible="{Binding ItemDetails.HasSelection}">
+                        <StackPanel Margin="16" Spacing="14">
+
+                            <!-- Header: Name & Type -->
+                            <StackPanel Spacing="6">
+                                <TextBlock Text="{Binding ItemDetails.Title}"
+                                           FontSize="16"
+                                           FontWeight="Bold"
+                                           TextWrapping="Wrap"
+                                           Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}" />
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <Border Background="{DynamicResource SystemControlHighlightListLowBrush}"
+                                            BorderBrush="{DynamicResource SystemControlHighlightAccentBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="4"
+                                            Padding="6,2">
+                                        <TextBlock Text="{Binding ItemDetails.NodeType}"
+                                                   FontSize="10"
+                                                   FontWeight="Bold"
+                                                   Foreground="{DynamicResource SystemControlHighlightAccentBrush}" />
+                                    </Border>
+                                    <Border Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"
+                                            CornerRadius="4"
+                                            Padding="6,2">
+                                        <TextBlock Text="{Binding ItemDetails.Category}"
+                                                   FontSize="10"
+                                                   FontWeight="SemiBold"
+                                                   Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                                    </Border>
+                                    <Border Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"
+                                            CornerRadius="4"
+                                            Padding="6,2">
+                                        <TextBlock Text="{Binding ItemDetails.FormattedSize}"
+                                                   FontSize="10"
+                                                   FontWeight="Bold"
+                                                   Foreground="#10B981" />
+                                    </Border>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <Separator Background="{DynamicResource SystemControlTransientBorderBrush}" Height="1" />
+
+                            <!-- Path Section -->
+                            <StackPanel Spacing="4">
+                                <TextBlock Text="PHYSICAL PATH"
+                                           FontSize="10"
+                                           FontWeight="Bold"
+                                           Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                                <Border Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"
+                                        BorderBrush="{DynamicResource SystemControlTransientBorderBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="4"
+                                        Padding="8,6">
+                                    <SelectableTextBlock Text="{Binding ItemDetails.PrimaryPath}"
+                                                         FontSize="11"
+                                                         TextWrapping="Wrap"
+                                                         FontFamily="Consolas, monospace" />
+                                </Border>
+                            </StackPanel>
+
+                            <!-- Confidence & Consistency -->
+                            <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto">
+                                <StackPanel Grid.Row="0" Grid.Column="0" Spacing="2" Margin="0,0,6,0">
+                                    <TextBlock Text="CONFIDENCE" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                                    <TextBlock Text="{Binding ItemDetails.ConfidenceText}" FontSize="11" FontWeight="SemiBold" TextWrapping="Wrap" />
+                                </StackPanel>
+
+                                <StackPanel Grid.Row="0" Grid.Column="1" Spacing="2" Margin="6,0,0,0">
+                                    <TextBlock Text="PROVIDER" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                                    <TextBlock Text="{Binding ItemDetails.ProviderId}" FontSize="11" FontWeight="SemiBold" TextWrapping="Wrap" />
+                                </StackPanel>
+                            </Grid>
+
+                            <StackPanel Spacing="2">
+                                <TextBlock Text="CONSISTENCY REQUIREMENT" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                                <TextBlock Text="{Binding ItemDetails.ConsistencyText}" FontSize="11" FontWeight="SemiBold" TextWrapping="Wrap" />
+                            </StackPanel>
+
+                            <!-- Why is this included? (Plain English Rationale) -->
+                            <Border Background="{DynamicResource SystemControlHighlightListLowBrush}"
+                                    BorderBrush="{DynamicResource SystemControlHighlightAccentBrush}"
+                                    BorderThickness="1,0,0,0"
+                                    Padding="10,8"
+                                    CornerRadius="0,4,4,0">
+                                <StackPanel Spacing="4">
+                                    <TextBlock Text="Why is this included?"
+                                               FontSize="11"
+                                               FontWeight="Bold"
+                                               Foreground="{DynamicResource SystemControlHighlightAccentBrush}" />
+                                    <TextBlock Text="{Binding ItemDetails.InclusionReason}"
+                                               FontSize="11"
+                                               TextWrapping="Wrap"
+                                               Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}" />
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Exclusions (if any) -->
+                            <Border Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"
+                                    BorderBrush="#F59E0B"
+                                    BorderThickness="1,0,0,0"
+                                    Padding="10,8"
+                                    CornerRadius="0,4,4,0"
+                                    IsVisible="{Binding ItemDetails.HasExclusion}">
+                                <StackPanel Spacing="4">
+                                    <TextBlock Text="Exclusion Rationale"
+                                               FontSize="11"
+                                               FontWeight="Bold"
+                                               Foreground="#F59E0B" />
+                                    <TextBlock Text="{Binding ItemDetails.ExclusionReason}"
+                                               FontSize="11"
+                                               TextWrapping="Wrap"
+                                               Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}" />
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Component Decomposition Breakdown -->
+                            <StackPanel Spacing="6" IsVisible="{Binding ItemDetails.Components.Count}">
+                                <TextBlock Text="COMPONENT BREAKDOWN"
+                                           FontSize="10"
+                                           FontWeight="Bold"
+                                           Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                                <ItemsControl ItemsSource="{Binding ItemDetails.Components}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:ComponentDetailItem">
+                                            <Border Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"
+                                                    BorderBrush="{DynamicResource SystemControlTransientBorderBrush}"
+                                                    BorderThickness="1"
+                                                    CornerRadius="4"
+                                                    Padding="8,6"
+                                                    Margin="0,2">
+                                                <Grid ColumnDefinitions="*,Auto">
+                                                    <StackPanel Grid.Column="0" Spacing="2">
+                                                        <TextBlock Text="{Binding Name}" FontSize="11" FontWeight="SemiBold" />
+                                                        <TextBlock Text="{Binding Type}" FontSize="9" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                                                    </StackPanel>
+                                                    <TextBlock Grid.Column="1"
+                                                               Text="{Binding FormattedSize}"
+                                                               FontSize="11"
+                                                               FontWeight="Bold"
+                                                               Foreground="#10B981"
+                                                               VerticalAlignment="Center" />
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+
+                        </StackPanel>
+                    </ScrollViewer>
+
+                    <!-- Empty State: No Node Selected -->
+                    <StackPanel VerticalAlignment="Center"
+                                HorizontalAlignment="Center"
+                                Spacing="10"
+                                Margin="24"
+                                IsVisible="{Binding !ItemDetails.HasSelection}">
+                        <Border Width="48" Height="48"
+                                CornerRadius="24"
+                                Background="{DynamicResource SystemControlHighlightListLowBrush}"
+                                HorizontalAlignment="Center">
+                            <PathIcon Data="{StaticResource NavIconOverview}"
+                                      Width="20" Height="20"
+                                      Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+                                      HorizontalAlignment="Center"
+                                      VerticalAlignment="Center" />
+                        </Border>
+                        <TextBlock Text="No Item Selected"
+                                   FontSize="14"
+                                   FontWeight="Bold"
+                                   HorizontalAlignment="Center"
+                                   Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}" />
+                        <TextBlock Text="Select an item in the tree to inspect its physical location, confidence level, components, and inclusion rationale."
+                                   FontSize="11"
+                                   TextWrapping="Wrap"
+                                   TextAlignment="Center"
+                                   Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+        </Grid>
 
         <!-- ================================================================= -->
-        <!-- 5. Bottom Telemetry & Status Bar                                   -->
+        <!-- 5. Bottom Selection Summary Bar & Telemetry                        -->
         <!-- ================================================================= -->
         <Border Grid.Row="4" Margin="0,12,0,0">
             <Grid ColumnDefinitions="*,Auto">
+                <!-- Left: Status message -->
                 <TextBlock Grid.Column="0"
                            Text="{Binding StatusMessage}"
                            FontSize="12"
                            Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
                            VerticalAlignment="Center" />
 
-                <TextBlock Grid.Column="1"
-                           Text="UI Thread: 60 FPS • Virtualization: Active • Category Cards: 8"
-                           FontSize="11"
-                           Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
-                           VerticalAlignment="Center" />
+                <!-- Right: Live Selection Summary Pill & Telemetry -->
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                    <!-- Warning Pill if locked files require VSS -->
+                    <Border Background="#33F59E0B"
+                            BorderBrush="#F59E0B"
+                            BorderThickness="1"
+                            CornerRadius="4"
+                            Padding="8,4"
+                            IsVisible="{Binding HasLockedFilesWarning}">
+                        <StackPanel Orientation="Horizontal" Spacing="4">
+                            <PathIcon Data="{StaticResource IconShieldCheck}" Width="12" Height="12" Foreground="#F59E0B" />
+                            <TextBlock Text="VSS Snapshot Required" FontSize="11" FontWeight="SemiBold" Foreground="#F59E0B" />
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Real-Time Selection Total Pill -->
+                    <Border Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"
+                            BorderBrush="{DynamicResource SystemControlHighlightAccentBrush}"
+                            BorderThickness="1"
+                            CornerRadius="6"
+                            Padding="12,5">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <TextBlock Text="Selected:" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center" />
+                            <TextBlock Text="{Binding SelectedItemsCount, StringFormat='{}{0:N0} items'}"
+                                       FontSize="12"
+                                       FontWeight="Bold"
+                                       Foreground="{DynamicResource SystemControlHighlightAccentBrush}"
+                                       VerticalAlignment="Center" />
+                            <TextBlock Text="•" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" VerticalAlignment="Center" />
+                            <TextBlock Text="{Binding SelectedFormattedSize}"
+                                       FontSize="12"
+                                       FontWeight="Bold"
+                                       Foreground="#10B981"
+                                       VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Telemetry note -->
+                    <TextBlock Text="Tree: Virtualized (60 FPS)"
+                               FontSize="11"
+                               Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+                               VerticalAlignment="Center" />
+                </StackPanel>
             </Grid>
         </Border>
+
     </Grid>
 </UserControl>
