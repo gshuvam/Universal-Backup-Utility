@@ -52,6 +52,192 @@
                 </Grid>
             </Border>
 
+            <!-- Verification Drill Drawer / Panel (Task 6.4) -->
+            <Border Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
+                    BorderBrush="#3B82F6"
+                    BorderThickness="1.5"
+                    CornerRadius="10"
+                    Padding="20"
+                    IsVisible="{Binding IsDrillDrawerOpen}"
+                    BoxShadow="0 8 32 0 #33000000">
+                <StackPanel Spacing="16">
+                    <!-- Drawer Header -->
+                    <Grid ColumnDefinitions="*,Auto">
+                        <StackPanel Grid.Column="0" Spacing="4">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <TextBlock Text="🛡️" FontSize="18" VerticalAlignment="Center" />
+                                <TextBlock Text="Verification Drill &amp; Disaster Recovery Certification"
+                                           FontSize="16"
+                                           FontWeight="Bold"
+                                           Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}" />
+                            </StackPanel>
+                            <TextBlock Text="Multi-tier validation: validates dual-snapshot cryptographic receipts, restic repository data block hashes, and executes isolated sandbox sample restore drills."
+                                       FontSize="12"
+                                       Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                        </StackPanel>
+                        <Button Grid.Column="1"
+                                Command="{Binding CloseDrillDrawerCommand}"
+                                Content="✕ Close"
+                                Padding="12,6"
+                                CornerRadius="6"
+                                VerticalAlignment="Top" />
+                    </Grid>
+
+                    <!-- Drill Configuration Bar -->
+                    <Border Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"
+                            CornerRadius="8"
+                            Padding="14">
+                        <Grid ColumnDefinitions="*,16,140,16,Auto">
+                            <StackPanel Grid.Column="0" Spacing="4">
+                                <TextBlock Text="Drill Level" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                                <ComboBox ItemsSource="{Binding DrillLevelOptions}"
+                                          SelectedItem="{Binding SelectedDrillLevel}"
+                                          HorizontalAlignment="Stretch"
+                                          CornerRadius="6"
+                                          IsEnabled="{Binding !IsDrillRunning}" />
+                            </StackPanel>
+
+                            <StackPanel Grid.Column="2" Spacing="4">
+                                <TextBlock Text="Data Check Subset" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                                <ComboBox ItemsSource="{Binding DataSubsetOptions}"
+                                          SelectedItem="{Binding SelectedDataSubset}"
+                                          HorizontalAlignment="Stretch"
+                                          CornerRadius="6"
+                                          IsEnabled="{Binding !IsDrillRunning}" />
+                            </StackPanel>
+
+                            <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="10" VerticalAlignment="Bottom">
+                                <Button Command="{Binding ExecuteConfiguredDrillCommand}"
+                                        Classes="accent"
+                                        Padding="18,8"
+                                        CornerRadius="6"
+                                        IsEnabled="{Binding !IsDrillRunning}">
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <TextBlock Text="⚡ Execute Drill" FontWeight="Bold" FontSize="12" />
+                                    </StackPanel>
+                                </Button>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
+                    <!-- Live Execution Progress / Status -->
+                    <Border Background="#1E293B"
+                            BorderBrush="#334155"
+                            BorderThickness="1"
+                            CornerRadius="8"
+                            Padding="12"
+                            IsVisible="{Binding IsDrillRunning}">
+                        <StackPanel Spacing="8">
+                            <Grid ColumnDefinitions="Auto,*,Auto">
+                                <TextBlock Grid.Column="0" Text="⏳" FontSize="14" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                <TextBlock Grid.Column="1" Text="{Binding DrillProgressMessage}" FontSize="12" FontWeight="SemiBold" Foreground="#93C5FD" VerticalAlignment="Center" />
+                                <ProgressBar Grid.Column="2" IsIndeterminate="True" Width="100" Height="4" VerticalAlignment="Center" />
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Drill Certification Outcome Card -->
+                    <Border Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"
+                            CornerRadius="8"
+                            Padding="16"
+                            IsVisible="{Binding HasDrillResult}">
+                        <StackPanel Spacing="14">
+                            <!-- Outcome Header -->
+                            <Grid ColumnDefinitions="*,Auto">
+                                <StackPanel Grid.Column="0" Spacing="4">
+                                    <TextBlock Text="Certification Outcome" FontSize="14" FontWeight="Bold" />
+                                    <TextBlock Text="{Binding DrillSummaryText}" FontSize="12" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" TextWrapping="Wrap" />
+                                </StackPanel>
+
+                                <Border Grid.Column="1"
+                                        Background="{Binding DrillResultBadgeColor}"
+                                        CornerRadius="6"
+                                        Padding="12,6"
+                                        VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding DrillResultBadge}"
+                                               FontWeight="Bold"
+                                               FontSize="12"
+                                               Foreground="White" />
+                                </Border>
+                            </Grid>
+
+                            <!-- 3 Tiers Result Cards -->
+                            <Grid ColumnDefinitions="*,12,*,12,*">
+                                <!-- Tier 1 Card -->
+                                <Border Grid.Column="0" Background="{DynamicResource SystemControlBackgroundAltHighBrush}" CornerRadius="6" Padding="12">
+                                    <StackPanel Spacing="4">
+                                        <TextBlock Text="Tier 1: Metadata &amp; Receipts" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                                        <TextBlock Text="{Binding Level1Detail}" FontSize="11" Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}" TextWrapping="Wrap" />
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- Tier 2 Card -->
+                                <Border Grid.Column="2" Background="{DynamicResource SystemControlBackgroundAltHighBrush}" CornerRadius="6" Padding="12">
+                                    <StackPanel Spacing="4">
+                                        <TextBlock Text="Tier 2: Stored Chunk Hash" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                                        <TextBlock Text="{Binding Level2Detail}" FontSize="11" Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}" TextWrapping="Wrap" />
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- Tier 3 Card -->
+                                <Border Grid.Column="4" Background="{DynamicResource SystemControlBackgroundAltHighBrush}" CornerRadius="6" Padding="12">
+                                    <StackPanel Spacing="4">
+                                        <TextBlock Text="Tier 3: Sandbox Restore" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                                        <TextBlock Text="{Binding Level3Detail}" FontSize="11" Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}" TextWrapping="Wrap" />
+                                    </StackPanel>
+                                </Border>
+                            </Grid>
+
+                            <!-- Level 3 Restored Sample Files Table -->
+                            <StackPanel Spacing="6" IsVisible="{Binding DrillSampleFiles.Count}">
+                                <TextBlock Text="Level 3 Sandbox Restored Sample Files" FontSize="12" FontWeight="SemiBold" />
+                                <Border Background="{DynamicResource SystemControlBackgroundAltHighBrush}" CornerRadius="6" Padding="8">
+                                    <StackPanel Spacing="6">
+                                        <!-- Table Header -->
+                                        <Grid ColumnDefinitions="*,90,110,90" Margin="4,0,4,2">
+                                            <TextBlock Grid.Column="0" Text="Sample Path / File" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                                            <TextBlock Grid.Column="1" Text="Size" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                                            <TextBlock Grid.Column="2" Text="SHA-256 Hash" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                                            <TextBlock Grid.Column="3" Text="Status" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" HorizontalAlignment="Right" />
+                                        </Grid>
+
+                                        <ItemsControl ItemsSource="{Binding DrillSampleFiles}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate x:DataType="models:DrillSampleFileViewModel">
+                                                    <Grid ColumnDefinitions="*,90,110,90" Margin="4,2,4,2">
+                                                        <TextBlock Grid.Column="0" Text="{Binding RelativePath}" FontSize="11" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                                        <TextBlock Grid.Column="1" Text="{Binding SizeDisplay}" FontSize="11" VerticalAlignment="Center" />
+                                                        <TextBlock Grid.Column="2" Text="{Binding HashDisplay}" FontFamily="Consolas,monospace" FontSize="10" VerticalAlignment="Center" />
+                                                        <Border Grid.Column="3" Background="{Binding StatusColor}" CornerRadius="3" Padding="6,2" HorizontalAlignment="Right">
+                                                            <TextBlock Text="{Binding StatusBadge}" FontSize="9" FontWeight="Bold" Foreground="White" />
+                                                        </Border>
+                                                    </Grid>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+
+                            <!-- Real-time Console Excerpt -->
+                            <Expander Header="Drill Execution Console Log" IsExpanded="False" CornerRadius="6">
+                                <Border Background="#0F172A" CornerRadius="6" Padding="10" Margin="0,6,0,0">
+                                    <ScrollViewer MaxHeight="140">
+                                        <ItemsControl ItemsSource="{Binding DrillLogLines}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <TextBlock Text="{Binding .}" FontFamily="Consolas,monospace" FontSize="10" Foreground="#94A3B8" />
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </ScrollViewer>
+                                </Border>
+                            </Expander>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </Border>
+
             <!-- Search and Filter Bar -->
             <Grid ColumnDefinitions="*,16,140,16,140">
                 <TextBox Grid.Column="0"

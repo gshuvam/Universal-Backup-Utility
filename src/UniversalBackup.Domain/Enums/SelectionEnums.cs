@@ -105,6 +105,7 @@ public enum SnapshotVerificationState
     Unverified,
     QuickVerified,
     FullReadVerified,
+    SandboxVerified,
     Failed
 }
 

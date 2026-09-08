@@ -195,3 +195,34 @@ public partial class RetentionPreviewItemViewModel : ObservableObject
     private bool _isPreserved = true;
 }
 
+/// <summary>
+/// Represents a sample file inspected during Level 3 verification drills.
+/// </summary>
+public partial class DrillSampleFileViewModel : ObservableObject
+{
+    [ObservableProperty]
+    private string _relativePath = string.Empty;
+
+    [ObservableProperty]
+    private string _fileName = string.Empty;
+
+    [ObservableProperty]
+    private string _sizeDisplay = "0 B";
+
+    [ObservableProperty]
+    private string _hashDisplay = "-";
+
+    [ObservableProperty]
+    private bool _readSucceeded = true;
+
+    [ObservableProperty]
+    private string _statusBadge = "VERIFIED";
+
+    [ObservableProperty]
+    private string _statusColor = "#10B981";
+
+    [ObservableProperty]
+    private string _errorMessage = string.Empty;
+}
+
+

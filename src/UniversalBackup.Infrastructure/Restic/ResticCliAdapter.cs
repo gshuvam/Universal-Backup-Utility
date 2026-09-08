@@ -207,11 +207,22 @@ public class ResticCliAdapter : IResticEngine
         }
     }
 
+    public Task RestoreAsync(
+        string repositoryPath,
+        string password,
+        string snapshotId,
+        string targetPath,
+        CancellationToken cancellationToken = default)
+    {
+        return RestoreAsync(repositoryPath, password, snapshotId, targetPath, null, cancellationToken);
+    }
+
     public async Task RestoreAsync(
         string repositoryPath,
         string password,
         string snapshotId,
         string targetPath,
+        IEnumerable<string>? includePatterns,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(repositoryPath);
@@ -219,7 +230,19 @@ public class ResticCliAdapter : IResticEngine
         ArgumentException.ThrowIfNullOrWhiteSpace(snapshotId);
         ArgumentException.ThrowIfNullOrWhiteSpace(targetPath);
 
-        var args = new[] { "restore", snapshotId, "-r", repositoryPath, "-t", targetPath };
+        var args = new List<string> { "restore", snapshotId, "-r", repositoryPath, "-t", targetPath };
+        if (includePatterns != null)
+        {
+            foreach (var pattern in includePatterns)
+            {
+                if (!string.IsNullOrWhiteSpace(pattern))
+                {
+                    args.Add("--include");
+                    args.Add(pattern);
+                }
+            }
+        }
+
         var result = await ExecuteCommandAsync(password, args, cancellationToken: cancellationToken).ConfigureAwait(false);
 
         if (result.ExitCode != 0)

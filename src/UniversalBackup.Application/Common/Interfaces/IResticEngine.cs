@@ -17,6 +17,8 @@ public interface IResticEngine
         CancellationToken cancellationToken = default);
     Task<IReadOnlyList<ResticSnapshot>> ListSnapshotsAsync(string repositoryPath, string password, CancellationToken cancellationToken = default);
     Task RestoreAsync(string repositoryPath, string password, string snapshotId, string targetPath, CancellationToken cancellationToken = default);
+    Task RestoreAsync(string repositoryPath, string password, string snapshotId, string targetPath, IEnumerable<string>? includePatterns, CancellationToken cancellationToken = default)
+        => RestoreAsync(repositoryPath, password, snapshotId, targetPath, cancellationToken);
     Task UnlockRepositoryAsync(string repositoryPath, string password, CancellationToken cancellationToken = default);
     Task<bool> CheckRepositoryAsync(string repositoryPath, string password, bool readData = false, string? readDataSubset = null, CancellationToken cancellationToken = default);
     Task ChangePasswordAsync(string repositoryPath, string currentPassword, string newPassword, CancellationToken cancellationToken = default);
