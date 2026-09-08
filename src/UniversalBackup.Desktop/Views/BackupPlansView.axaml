@@ -46,6 +46,28 @@
                 </Grid>
             </Border>
 
+            <!-- Missed Run Catch-up Alert Banner -->
+            <Border IsVisible="{Binding HasMissedRuns}"
+                    Background="#451A03"
+                    BorderBrush="#D97706"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    Padding="16">
+                <Grid ColumnDefinitions="Auto,*,Auto">
+                    <PathIcon Grid.Column="0" Data="{StaticResource NavIconActivity}" Foreground="#F59E0B" Width="24" Height="24" VerticalAlignment="Center" />
+                    <StackPanel Grid.Column="1" Margin="16,0,0,0" VerticalAlignment="Center" Spacing="4">
+                        <TextBlock Text="⚠️ Missed Scheduled Backup Run Detected" FontWeight="Bold" Foreground="#F59E0B" FontSize="14" />
+                        <TextBlock Text="One or more scheduled backup tasks were missed while the machine was asleep or powered off. Click to execute catch-up run."
+                                   FontSize="12" Foreground="#FDE68A" />
+                    </StackPanel>
+                    <Button Grid.Column="2"
+                            Command="{Binding RefreshScheduleStatusCommand}"
+                            Padding="12,6" CornerRadius="6" VerticalAlignment="Center">
+                        <TextBlock Text="Refresh / Catch-up" FontWeight="SemiBold" FontSize="12" />
+                    </Button>
+                </Grid>
+            </Border>
+
             <!-- Plan Builder Card (Visible when creating a new plan) -->
             <Border IsVisible="{Binding IsCreatingNewPlan}"
                     Background="{DynamicResource SystemControlBackgroundAltHighBrush}"

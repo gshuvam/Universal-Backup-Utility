@@ -19,12 +19,20 @@ public partial class BackupPlansViewModel : ViewModelBase
 {
     private readonly INavigationService? _navigationService;
     private readonly IPostBackupLifecycleCoordinator? _postBackupCoordinator;
+    private readonly IOSchedulerService? _schedulerService;
+    private readonly ICatalogService? _catalogService;
 
     [ObservableProperty]
     private string _statusMessage = "Manage automated background backup profiles and retention policies.";
 
     [ObservableProperty]
     private ObservableCollection<BackupPlanItemViewModel> _configuredPlans = [];
+
+    [ObservableProperty]
+    private ObservableCollection<MissedRunAlert> _missedRunAlerts = [];
+
+    [ObservableProperty]
+    private bool _hasMissedRuns;
 
     [ObservableProperty]
     private bool _isSimulatingRetention;
@@ -85,11 +93,16 @@ public partial class BackupPlansViewModel : ViewModelBase
 
     public BackupPlansViewModel(
         INavigationService? navigationService = null,
-        IPostBackupLifecycleCoordinator? postBackupCoordinator = null)
+        IPostBackupLifecycleCoordinator? postBackupCoordinator = null,
+        IOSchedulerService? schedulerService = null,
+        ICatalogService? catalogService = null)
     {
         _navigationService = navigationService;
         _postBackupCoordinator = postBackupCoordinator;
+        _schedulerService = schedulerService;
+        _catalogService = catalogService;
         SeedDefaultPlans();
+        _ = RefreshScheduleStatusAsync();
     }
 
     private void SeedDefaultPlans()
@@ -216,7 +229,57 @@ public partial class BackupPlansViewModel : ViewModelBase
         BuilderErrorMessage = string.Empty;
         OnPropertyChanged(nameof(ConfiguredPlansCount));
         OnPropertyChanged(nameof(ActivePlansCount));
-        StatusMessage = $"Plan '{newPlan.Name}' created and scheduled successfully.";
+
+        if (_schedulerService != null)
+        {
+            _ = RegisterPlanWithSchedulerAsync(newPlan);
+        }
+
+        StatusMessage = $"Plan '{newPlan.Name}' created and scheduled successfully in OS scheduler.";
+    }
+
+    [RelayCommand]
+    public async Task RefreshScheduleStatusAsync()
+    {
+        if (_schedulerService == null) return;
+
+        try
+        {
+            var domainPlans = ConfiguredPlans.Select(p => ToDomainPlan(p)).ToList();
+            var statuses = await _schedulerService.GetAllTaskStatusesAsync(domainPlans).ConfigureAwait(false);
+
+            foreach (var plan in ConfiguredPlans)
+            {
+                var status = statuses.FirstOrDefault(s => s.PlanId == plan.Id);
+                if (status != null)
+                {
+                    plan.OsSchedulerStatus = status.IsRegistered ? (status.IsEnabled ? "Active (OS Scheduler)" : "Disabled") : "Not registered";
+                    plan.NextRunText = status.NextRunTimeUtc.HasValue ? $"{status.NextRunTimeUtc.Value.ToLocalTime():g}" : "No next run";
+                }
+            }
+
+            var missedAlerts = await _schedulerService.DetectMissedRunsAsync(domainPlans).ConfigureAwait(false);
+            MissedRunAlerts.Clear();
+            foreach (var alert in missedAlerts)
+            {
+                MissedRunAlerts.Add(alert);
+                var matchingPlan = ConfiguredPlans.FirstOrDefault(p => p.Id == alert.PlanId);
+                if (matchingPlan != null)
+                {
+                    matchingPlan.IsMissedRun = true;
+                }
+            }
+
+            HasMissedRuns = MissedRunAlerts.Count > 0;
+            if (HasMissedRuns)
+            {
+                StatusMessage = $"⚠️ Detected {MissedRunAlerts.Count} missed backup run(s) due to system sleep/power-off.";
+            }
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"Notice updating schedule status: {ex.Message}";
+        }
     }
 
     [RelayCommand]
@@ -224,9 +287,15 @@ public partial class BackupPlansViewModel : ViewModelBase
     {
         plan.IsActive = !plan.IsActive;
         OnPropertyChanged(nameof(ActivePlansCount));
+
+        if (_schedulerService != null)
+        {
+            _ = _schedulerService.EnableTaskAsync(plan.Id, plan.IsActive);
+        }
+
         StatusMessage = plan.IsActive
-            ? $"Plan '{plan.Name}' activated."
-            : $"Plan '{plan.Name}' paused.";
+            ? $"Plan '{plan.Name}' activated in OS scheduler."
+            : $"Plan '{plan.Name}' paused in OS scheduler.";
     }
 
     [RelayCommand]
@@ -235,7 +304,64 @@ public partial class BackupPlansViewModel : ViewModelBase
         ConfiguredPlans.Remove(plan);
         OnPropertyChanged(nameof(ConfiguredPlansCount));
         OnPropertyChanged(nameof(ActivePlansCount));
-        StatusMessage = $"Plan '{plan.Name}' deleted.";
+
+        if (_schedulerService != null)
+        {
+            _ = _schedulerService.UnregisterTaskAsync(plan.Id);
+        }
+
+        StatusMessage = $"Plan '{plan.Name}' deleted and removed from OS scheduler.";
+    }
+
+    [RelayCommand]
+    public void RunMissedPlan(MissedRunAlert alert)
+    {
+        var plan = ConfiguredPlans.FirstOrDefault(p => p.Id == alert.PlanId);
+        MissedRunAlerts.Remove(alert);
+        HasMissedRuns = MissedRunAlerts.Count > 0;
+
+        if (plan != null)
+        {
+            plan.IsMissedRun = false;
+            RunPlanNow(plan);
+        }
+        else
+        {
+            StatusMessage = $"Initiating catch-up run for plan '{alert.PlanName}'...";
+            _navigationService?.NavigateTo(NavigationSection.Backup);
+        }
+    }
+
+    private async Task RegisterPlanWithSchedulerAsync(BackupPlanItemViewModel plan)
+    {
+        if (_schedulerService == null) return;
+        try
+        {
+            var domainPlan = ToDomainPlan(plan);
+            await _schedulerService.RegisterOrUpdateTaskAsync(domainPlan).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"Warning: Could not register OS scheduled task: {ex.Message}";
+        }
+    }
+
+    private static BackupPlan ToDomainPlan(BackupPlanItemViewModel plan)
+    {
+        return new BackupPlan(
+            id: plan.Id,
+            name: plan.Name,
+            revision: 1,
+            preset: BackupPreset.GameSavesOnly,
+            destinationPolicy: new DestinationPolicy("local"),
+            retentionPolicy: new RetentionPolicy(
+                KeepLast: plan.KeepLastCount > 0 ? plan.KeepLastCount : 7,
+                KeepDaily: plan.KeepDailyCount > 0 ? plan.KeepDailyCount : 7,
+                KeepWeekly: plan.KeepWeeklyCount > 0 ? plan.KeepWeeklyCount : 4,
+                KeepMonthly: plan.KeepMonthlyCount > 0 ? plan.KeepMonthlyCount : 3),
+            futureMatchPolicy: FutureMatchPolicy.AutoInclude,
+            consistencyClass: plan.ConsistencyClass,
+            schedule: new BackupScheduleConfig(plan.CronExpression, plan.IsActive));
     }
 
     [RelayCommand]

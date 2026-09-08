@@ -6,6 +6,7 @@ using CommunityToolkit.Mvvm.Input;
 using UniversalBackup.Application.Common.Interfaces;
 using UniversalBackup.Desktop.Services;
 using UniversalBackup.Domain.Enums;
+using UniversalBackup.Domain.Models;
 
 namespace UniversalBackup.Desktop.ViewModels;
 
@@ -16,6 +17,7 @@ public partial class OverviewViewModel : ViewModelBase
 {
     private readonly INavigationService _navigationService;
     private readonly ICatalogService? _catalogService;
+    private readonly IOSchedulerService? _schedulerService;
 
     [ObservableProperty]
     private string _healthStatusText = "System Protected";
@@ -44,10 +46,14 @@ public partial class OverviewViewModel : ViewModelBase
     [ObservableProperty]
     private bool _isLoadingTelemetry;
 
-    public OverviewViewModel(INavigationService navigationService, ICatalogService? catalogService = null)
+    public OverviewViewModel(
+        INavigationService navigationService,
+        ICatalogService? catalogService = null,
+        IOSchedulerService? schedulerService = null)
     {
         _navigationService = navigationService;
         _catalogService = catalogService;
+        _schedulerService = schedulerService;
         _ = LoadTelemetryAsync();
     }
 
@@ -121,6 +127,30 @@ public partial class OverviewViewModel : ViewModelBase
                 LastBackupSummary = "No backup runs recorded yet. Ready for your first backup.";
                 HealthStatusText = "Ready to Back Up";
                 HealthStatusColor = "#3B82F6";
+            }
+
+            if (_schedulerService != null)
+            {
+                var defaultPlan = new BackupPlan(
+                    Guid.Parse("11111111-1111-1111-1111-111111111111"),
+                    "Daily Gamer Plan",
+                    1,
+                    BackupPreset.GameSavesOnly,
+                    new DestinationPolicy("local"),
+                    schedule: new BackupScheduleConfig("0 22 * * *"));
+
+                var missedRuns = await _schedulerService.DetectMissedRunsAsync([defaultPlan]).ConfigureAwait(false);
+                if (missedRuns.Count > 0)
+                {
+                    HealthStatusText = "⚠️ Missed Scheduled Run";
+                    HealthStatusColor = "#F59E0B";
+                }
+
+                var status = await _schedulerService.GetTaskStatusAsync(defaultPlan).ConfigureAwait(false);
+                if (status.NextRunTimeUtc.HasValue)
+                {
+                    NextScheduledRun = $"{status.NextRunTimeUtc.Value.ToLocalTime():g} ({defaultPlan.Name})";
+                }
             }
 
             RepositoryStatus = "Encrypted Local Storage (WAL Active)";

@@ -86,6 +86,15 @@ public partial class BackupPlanItemViewModel : ObservableObject
 
     [ObservableProperty]
     private bool _suppressDuringGaming = true;
+
+    [ObservableProperty]
+    private string _nextRunText = "Scheduled";
+
+    [ObservableProperty]
+    private bool _isMissedRun;
+
+    [ObservableProperty]
+    private string _osSchedulerStatus = "Task Scheduler Active";
 }
 
 
