@@ -225,4 +225,57 @@ public partial class DrillSampleFileViewModel : ObservableObject
     private string _errorMessage = string.Empty;
 }
 
+/// <summary>
+/// Represents a legacy backup component entry displayed in the Legacy Importer UI.
+/// </summary>
+public partial class LegacyBackupEntryViewModel : ObservableObject
+{
+    [ObservableProperty]
+    private bool _isSelected = true;
+
+    [ObservableProperty]
+    private string _type = "GameFiles";
+
+    [ObservableProperty]
+    private string _provider = string.Empty;
+
+    [ObservableProperty]
+    private string _description = string.Empty;
+
+    [ObservableProperty]
+    private string _source = string.Empty;
+
+    [ObservableProperty]
+    private string _backupRelative = string.Empty;
+
+    [ObservableProperty]
+    private long? _sizeBytes;
+
+    [ObservableProperty]
+    private string _sizeDisplay = "0 B";
+
+    [ObservableProperty]
+    private bool _existsInBackup = true;
+
+    [ObservableProperty]
+    private string _priorityBadge = "Priority 1";
+
+    public string TypeIcon => Type.ToLowerInvariant() switch
+    {
+        "gamefiles" or "game_files" => "🎮",
+        "launchermetadata" or "launcher_metadata" => "📦",
+        "userdata" or "user_data" => "💾",
+        _ => "📁"
+    };
+
+    public string TypeBadgeColor => Type.ToLowerInvariant() switch
+    {
+        "gamefiles" or "game_files" => "#6366F1",
+        "launchermetadata" or "launcher_metadata" => "#F59E0B",
+        "userdata" or "user_data" => "#10B981",
+        _ => "#6B7280"
+    };
+}
+
+
 

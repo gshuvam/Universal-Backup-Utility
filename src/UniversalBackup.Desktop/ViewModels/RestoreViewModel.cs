@@ -9,8 +9,11 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using UniversalBackup.Application.Common.Interfaces;
 using UniversalBackup.Application.DTOs;
+using UniversalBackup.Desktop.Models;
 using UniversalBackup.Domain.Enums;
 using UniversalBackup.Domain.Models;
+using UniversalBackup.LegacyImport.Models;
+using UniversalBackup.LegacyImport.Services;
 
 namespace UniversalBackup.Desktop.ViewModels;
 
@@ -24,6 +27,9 @@ public partial class RestoreViewModel : ViewModelBase
     private readonly IRestorePlanner? _restorePlanner;
     private readonly IProcessConflictDetector? _conflictDetector;
     private readonly IRestoreExecutionCoordinator? _restoreCoordinator;
+    private readonly ILegacyBackupParser? _legacyParser;
+    private readonly ILegacyRestoreService? _legacyRestoreService;
+    private readonly ILegacyMigrationService? _legacyMigrationService;
     private List<HistoricalSnapshotItem> _allSnapshots = new();
 
     public IReadOnlyList<string> StatusFilters { get; } = new[]
@@ -152,6 +158,68 @@ public partial class RestoreViewModel : ViewModelBase
     public string? ActiveRepositoryPath { get; set; }
     public string? ActiveRepositoryPassword { get; set; }
 
+    // =========================================================================
+    // Task 7.1: Legacy PowerShell Backup Importer & Direct Restore Properties
+    // =========================================================================
+    [ObservableProperty]
+    private bool _isLegacyDrawerOpen;
+
+    [ObservableProperty]
+    private string _legacyBackupFolderPath = string.Empty;
+
+    [ObservableProperty]
+    private bool _isParsingLegacy;
+
+    [ObservableProperty]
+    private bool _isExecutingLegacyRestore;
+
+    [ObservableProperty]
+    private bool _isMigratingLegacy;
+
+    [ObservableProperty]
+    private LegacyBackupManifest? _loadedLegacyManifest;
+
+    [ObservableProperty]
+    private bool _hasLoadedLegacyManifest;
+
+    [ObservableProperty]
+    private string _legacyStatusMessage = "Select a legacy GameBackup folder containing manifest.json or inventory.csv.";
+
+    [ObservableProperty]
+    private string _legacyDestinationMode = "Original Locations";
+
+    [ObservableProperty]
+    private string _legacyCustomDestinationPath = string.Empty;
+
+    [ObservableProperty]
+    private string _legacyDriveMapFrom = "D:";
+
+    [ObservableProperty]
+    private string _legacyDriveMapTo = "E:";
+
+    [ObservableProperty]
+    private bool _legacyOverwriteExisting = false;
+
+    [ObservableProperty]
+    private double _legacyProgress;
+
+    [ObservableProperty]
+    private string _legacyResultSummary = string.Empty;
+
+    public bool IsLegacyCustomFolderMode => LegacyDestinationMode == "Custom Folder";
+
+    public ObservableCollection<LegacyBackupEntryViewModel> LegacyEntries { get; } = new();
+
+    public ObservableCollection<string> LegacyExecutionLogs { get; } = new();
+
+    public IReadOnlyList<string> LegacyDestinationModes { get; } = new[]
+    {
+        "Original Locations",
+        "Custom Folder"
+    };
+
+    partial void OnLegacyDestinationModeChanged(string value) => OnPropertyChanged(nameof(IsLegacyCustomFolderMode));
+
     public RestoreViewModel()
     {
         PopulateDesignTimeData();
@@ -161,12 +229,18 @@ public partial class RestoreViewModel : ViewModelBase
         ISnapshotTimelineService timelineService,
         IRestorePlanner? restorePlanner = null,
         IProcessConflictDetector? conflictDetector = null,
-        IRestoreExecutionCoordinator? restoreCoordinator = null)
+        IRestoreExecutionCoordinator? restoreCoordinator = null,
+        ILegacyBackupParser? legacyParser = null,
+        ILegacyRestoreService? legacyRestoreService = null,
+        ILegacyMigrationService? legacyMigrationService = null)
     {
         _timelineService = timelineService ?? throw new ArgumentNullException(nameof(timelineService));
         _restorePlanner = restorePlanner;
         _conflictDetector = conflictDetector;
         _restoreCoordinator = restoreCoordinator;
+        _legacyParser = legacyParser;
+        _legacyRestoreService = legacyRestoreService;
+        _legacyMigrationService = legacyMigrationService;
 
         InitDefaultMappingInputs();
         _ = LoadTimelineAsync();
@@ -614,6 +688,241 @@ public partial class RestoreViewModel : ViewModelBase
             {
                 SetExpansionRecursive(node.Children, isExpanded);
             }
+        }
+    }
+
+    // =========================================================================
+    // Task 7.1: Legacy Import & Direct Restore Commands
+    // =========================================================================
+    [RelayCommand]
+    public void ToggleLegacyDrawer()
+    {
+        IsLegacyDrawerOpen = !IsLegacyDrawerOpen;
+    }
+
+    [RelayCommand]
+    public async Task ParseLegacyBackupAsync()
+    {
+        if (string.IsNullOrWhiteSpace(LegacyBackupFolderPath))
+        {
+            LegacyStatusMessage = "Please provide a valid legacy backup folder path.";
+            return;
+        }
+
+        if (_legacyParser == null)
+        {
+            LegacyStatusMessage = "Legacy parser service is not configured.";
+            return;
+        }
+
+        IsParsingLegacy = true;
+        LegacyStatusMessage = "Inspecting and validating legacy backup set...";
+        LegacyEntries.Clear();
+        HasLoadedLegacyManifest = false;
+        LoadedLegacyManifest = null;
+        LegacyResultSummary = string.Empty;
+
+        try
+        {
+            var manifest = await _legacyParser.ParseAsync(LegacyBackupFolderPath);
+            if (manifest == null)
+            {
+                LegacyStatusMessage = "No valid manifest.json or inventory.csv found in the specified folder.";
+                return;
+            }
+
+            LoadedLegacyManifest = manifest;
+            HasLoadedLegacyManifest = true;
+
+            foreach (var entry in manifest.Entries)
+            {
+                int priorityNum = entry.Type.ToLowerInvariant() switch
+                {
+                    "gamefiles" or "game_files" or "games" => 1,
+                    "launchermetadata" or "launcher_metadata" or "metadata" => 2,
+                    "userdata" or "user_data" or "saves" => 3,
+                    _ => 4
+                };
+
+                LegacyEntries.Add(new LegacyBackupEntryViewModel
+                {
+                    IsSelected = true,
+                    Type = entry.Type,
+                    Provider = entry.Provider,
+                    Description = entry.Description,
+                    Source = entry.Source,
+                    BackupRelative = entry.BackupRelative,
+                    SizeBytes = entry.SizeBytes,
+                    SizeDisplay = entry.SizeBytes.HasValue ? CategoryCardModel.FormatBytes(entry.SizeBytes.Value) : "0 B",
+                    ExistsInBackup = entry.ExistsInBackup,
+                    PriorityBadge = $"Priority {priorityNum}"
+                });
+            }
+
+            LegacyStatusMessage = $"Successfully loaded {manifest.Entries.Count} component(s) captured {manifest.CreatedUtc:yyyy-MM-dd HH:mm:ss} from {manifest.ComputerName}\\{manifest.UserName}.";
+        }
+        catch (Exception ex)
+        {
+            LegacyStatusMessage = $"Failed to parse legacy backup: {ex.Message}";
+        }
+        finally
+        {
+            IsParsingLegacy = false;
+        }
+    }
+
+    [RelayCommand]
+    public void SelectAllLegacyEntries()
+    {
+        foreach (var entry in LegacyEntries)
+        {
+            entry.IsSelected = true;
+        }
+    }
+
+    [RelayCommand]
+    public void DeselectAllLegacyEntries()
+    {
+        foreach (var entry in LegacyEntries)
+        {
+            entry.IsSelected = false;
+        }
+    }
+
+    [RelayCommand]
+    public async Task ExecuteLegacyDirectRestoreAsync()
+    {
+        var selected = LegacyEntries
+            .Where(e => e.IsSelected)
+            .Select(vm => new LegacyBackupEntry
+            {
+                Type = vm.Type,
+                Provider = vm.Provider,
+                Description = vm.Description,
+                Source = vm.Source,
+                BackupRelative = vm.BackupRelative,
+                SizeBytes = vm.SizeBytes,
+                ExistsInBackup = vm.ExistsInBackup
+            })
+            .ToList();
+
+        if (selected.Count == 0)
+        {
+            LegacyStatusMessage = "Please select at least one component entry to restore.";
+            return;
+        }
+
+        if (_legacyRestoreService == null)
+        {
+            LegacyStatusMessage = "Legacy restore service is not configured.";
+            return;
+        }
+
+        IsExecutingLegacyRestore = true;
+        LegacyProgress = 0;
+        LegacyExecutionLogs.Clear();
+        LegacyResultSummary = string.Empty;
+        LegacyStatusMessage = $"Restoring {selected.Count} legacy component(s) directly...";
+
+        Dictionary<string, string>? driveMap = null;
+        if (!string.Equals(LegacyDestinationMode, "Custom Folder", StringComparison.OrdinalIgnoreCase) &&
+            !string.IsNullOrWhiteSpace(LegacyDriveMapFrom) &&
+            !string.IsNullOrWhiteSpace(LegacyDriveMapTo))
+        {
+            driveMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                [LegacyDriveMapFrom.Trim()] = LegacyDriveMapTo.Trim()
+            };
+        }
+
+        var request = new LegacyDirectRestoreRequest(
+            LegacyBackupPath: LegacyBackupFolderPath,
+            SelectedEntries: selected,
+            DestinationMode: LegacyDestinationMode,
+            CustomDestinationPath: LegacyCustomDestinationPath,
+            DriveMap: driveMap,
+            OverwriteExisting: LegacyOverwriteExisting);
+
+        var progressReporter = new Progress<double>(p => LegacyProgress = p);
+
+        try
+        {
+            var result = await _legacyRestoreService.RestoreAsync(request, progressReporter);
+            foreach (var log in result.LogEntries)
+            {
+                LegacyExecutionLogs.Add(log);
+            }
+
+            LegacyResultSummary = result.Summary;
+            LegacyStatusMessage = result.Success
+                ? $"Direct restore completed: {result.RestoredEntries} restored, {result.SkippedEntries} skipped."
+                : $"Direct restore encountered errors: {result.FailedEntries} failed.";
+        }
+        catch (Exception ex)
+        {
+            LegacyStatusMessage = $"Direct restore failed: {ex.Message}";
+            LegacyExecutionLogs.Add($"[EXCEPTION] {ex.Message}");
+        }
+        finally
+        {
+            IsExecutingLegacyRestore = false;
+        }
+    }
+
+    [RelayCommand]
+    public async Task MigrateLegacyToResticAsync()
+    {
+        if (string.IsNullOrWhiteSpace(LegacyBackupFolderPath))
+        {
+            LegacyStatusMessage = "Please provide a valid legacy backup folder path.";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(ActiveRepositoryPath))
+        {
+            LegacyStatusMessage = "No active Restic repository configured. Please set up a destination in the Destinations tab first.";
+            return;
+        }
+
+        if (_legacyMigrationService == null)
+        {
+            LegacyStatusMessage = "Legacy migration service is not configured.";
+            return;
+        }
+
+        IsMigratingLegacy = true;
+        LegacyProgress = 0;
+        LegacyResultSummary = string.Empty;
+        LegacyStatusMessage = "Migrating legacy backup into encrypted Restic repository...";
+
+        var request = new LegacyMigrationRequest(
+            LegacyBackupPath: LegacyBackupFolderPath,
+            TargetRepositoryPath: ActiveRepositoryPath,
+            TargetRepositoryPassword: ActiveRepositoryPassword ?? string.Empty,
+            TargetPlanName: "Migrated Legacy Game Backup");
+
+        var progressReporter = new Progress<double>(p => LegacyProgress = p);
+
+        try
+        {
+            var result = await _legacyMigrationService.MigrateAsync(request, progressReporter);
+            LegacyResultSummary = result.Summary;
+            LegacyStatusMessage = result.Success
+                ? $"Migration complete! Created snapshot {result.SnapshotId}."
+                : $"Migration failed: {result.Summary}";
+
+            if (result.Success)
+            {
+                await LoadTimelineAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            LegacyStatusMessage = $"Migration failed with exception: {ex.Message}";
+        }
+        finally
+        {
+            IsMigratingLegacy = false;
         }
     }
 

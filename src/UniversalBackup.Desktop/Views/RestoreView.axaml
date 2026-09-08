@@ -5,6 +5,7 @@
              xmlns:vm="using:UniversalBackup.Desktop.ViewModels"
              xmlns:dtos="using:UniversalBackup.Application.DTOs"
              xmlns:models="using:UniversalBackup.Domain.Models"
+             xmlns:desktopModels="using:UniversalBackup.Desktop.Models"
              mc:Ignorable="d" d:DesignWidth="1100" d:DesignHeight="950"
              x:Class="UniversalBackup.Desktop.Views.RestoreView"
              x:DataType="vm:RestoreViewModel">
@@ -35,6 +36,16 @@
                     </StackPanel>
 
                     <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                        <Button Command="{Binding ToggleLegacyDrawerCommand}"
+                                Padding="14,8"
+                                CornerRadius="6"
+                                BorderBrush="{DynamicResource SystemControlHighlightAccentBrush}"
+                                BorderThickness="1">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <TextBlock Text="📂" FontSize="13" />
+                                <TextBlock Text="Import Legacy Backup" FontWeight="SemiBold" FontSize="12" />
+                            </StackPanel>
+                        </Button>
                         <Button Command="{Binding RefreshSnapshotsCommand}"
                                 Classes="accent"
                                 Padding="16,8"
@@ -46,6 +57,281 @@
                         </Button>
                     </StackPanel>
                 </Grid>
+            </Border>
+
+            <!-- Legacy PowerShell Backup Importer Drawer -->
+            <Border IsVisible="{Binding IsLegacyDrawerOpen}"
+                    Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
+                    BorderBrush="{DynamicResource SystemControlHighlightAccentBrush}"
+                    BorderThickness="1.5"
+                    CornerRadius="12"
+                    Padding="24">
+                <StackPanel Spacing="16">
+                    <!-- Drawer Header -->
+                    <Grid ColumnDefinitions="Auto,*,Auto">
+                        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+                            <TextBlock Text="⚡" FontSize="24" VerticalAlignment="Center" />
+                            <StackPanel Spacing="2">
+                                <TextBlock Text="Legacy PowerShell Backup Importer &amp; Direct Restore"
+                                           FontSize="16"
+                                           FontWeight="Bold"
+                                           Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}" />
+                                <TextBlock Text="Inspect Universal-GameBackup.ps1 backup sets (manifest.json / inventory.csv), restore directly with component priority, or migrate into Restic."
+                                           FontSize="12"
+                                           Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                            </StackPanel>
+                        </StackPanel>
+                        <Button Grid.Column="2"
+                                Command="{Binding ToggleLegacyDrawerCommand}"
+                                Background="Transparent"
+                                BorderThickness="0"
+                                Padding="8,4"
+                                FontSize="14"
+                                FontWeight="Bold"
+                                Content="✕"
+                                ToolTip.Tip="Close Legacy Importer" />
+                    </Grid>
+
+                    <!-- Path Picker & Inspection Bar -->
+                    <Grid ColumnDefinitions="*,12,Auto">
+                        <TextBox Grid.Column="0"
+                                 Text="{Binding LegacyBackupFolderPath}"
+                                 Watermark="Enter path to legacy GameBackup_YYYYMMDD_HHMMSS folder..."
+                                 Padding="12,8"
+                                 CornerRadius="6" />
+                        <Button Grid.Column="2"
+                                Command="{Binding ParseLegacyBackupCommand}"
+                                Classes="accent"
+                                Padding="16,8"
+                                CornerRadius="6"
+                                IsEnabled="{Binding !IsParsingLegacy}">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <TextBlock Text="🔍 Inspect Backup Set" FontWeight="SemiBold" FontSize="12" />
+                            </StackPanel>
+                        </Button>
+                    </Grid>
+
+                    <!-- Status Message & Loading -->
+                    <ProgressBar IsVisible="{Binding IsParsingLegacy}" IsIndeterminate="True" Height="3" CornerRadius="1.5" />
+                    <TextBlock Text="{Binding LegacyStatusMessage}"
+                               FontSize="12"
+                               FontStyle="Italic"
+                               Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+
+                    <!-- Loaded Backup Set Details & Components -->
+                    <StackPanel IsVisible="{Binding HasLoadedLegacyManifest}" Spacing="16">
+                        <!-- Metadata Card -->
+                        <Border Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"
+                                CornerRadius="8"
+                                Padding="14">
+                            <Grid ColumnDefinitions="*,*,*,*">
+                                <StackPanel Grid.Column="0" Spacing="2">
+                                    <TextBlock Text="CAPTURE DATE" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                                    <TextBlock Text="{Binding LoadedLegacyManifest.CreatedUtc, StringFormat='{}{0:yyyy-MM-dd HH:mm:ss UTC}'}" FontSize="12" FontWeight="SemiBold" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Spacing="2">
+                                    <TextBlock Text="SOURCE MACHINE" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                                    <TextBlock Text="{Binding LoadedLegacyManifest.ComputerName}" FontSize="12" FontWeight="SemiBold" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="2" Spacing="2">
+                                    <TextBlock Text="SOURCE USER" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                                    <TextBlock Text="{Binding LoadedLegacyManifest.UserName}" FontSize="12" FontWeight="SemiBold" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="3" Spacing="2">
+                                    <TextBlock Text="SCOPE / FORMAT" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                                    <TextBlock Text="{Binding LoadedLegacyManifest.Scope, StringFormat='{}Scope: {0} (v1)'}" FontSize="12" FontWeight="SemiBold" />
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+
+                        <!-- Components Table Header -->
+                        <Grid ColumnDefinitions="Auto,*,Auto,Auto">
+                            <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                <Button Command="{Binding SelectAllLegacyEntriesCommand}" Content="Select All" Padding="10,4" FontSize="11" CornerRadius="4" />
+                                <Button Command="{Binding DeselectAllLegacyEntriesCommand}" Content="Deselect All" Padding="10,4" FontSize="11" CornerRadius="4" />
+                            </StackPanel>
+                            <TextBlock Grid.Column="1"
+                                       Margin="16,0,0,0"
+                                       Text="{Binding LegacyEntries.Count, StringFormat='{}Found {0} backup components'}"
+                                       FontSize="12"
+                                       FontWeight="SemiBold"
+                                       VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="3"
+                                       Text="Order: 1. GameFiles ➔ 2. LauncherMetadata ➔ 3. UserData"
+                                       FontSize="11"
+                                       FontStyle="Italic"
+                                       Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+                                       VerticalAlignment="Center" />
+                        </Grid>
+
+                        <!-- Components List -->
+                        <Border BorderBrush="{DynamicResource SystemControlTransientBorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="8"
+                                MaxHeight="220">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                <ItemsControl ItemsSource="{Binding LegacyEntries}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="desktopModels:LegacyBackupEntryViewModel">
+                                            <Border BorderBrush="{DynamicResource SystemControlTransientBorderBrush}"
+                                                    BorderThickness="0,0,0,1"
+                                                    Padding="12,8">
+                                                <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto">
+                                                    <CheckBox Grid.Column="0"
+                                                              IsChecked="{Binding IsSelected}"
+                                                              VerticalAlignment="Center"
+                                                              Margin="0,0,12,0" />
+                                                    <Border Grid.Column="1"
+                                                            Background="{Binding TypeBadgeColor}"
+                                                            CornerRadius="4"
+                                                            Padding="6,2"
+                                                            Margin="0,0,12,0"
+                                                            VerticalAlignment="Center">
+                                                        <TextBlock Text="{Binding Type}"
+                                                                   Foreground="White"
+                                                                   FontSize="10"
+                                                                   FontWeight="Bold" />
+                                                    </Border>
+                                                    <StackPanel Grid.Column="2" Spacing="2" VerticalAlignment="Center">
+                                                        <Grid ColumnDefinitions="Auto,Auto,*">
+                                                            <TextBlock Grid.Column="0" Text="{Binding Description}" FontWeight="SemiBold" FontSize="12" Margin="0,0,8,0" />
+                                                            <TextBlock Grid.Column="1" Text="{Binding Provider, StringFormat='[{0}]'}" FontSize="11" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" Margin="0,0,8,0" />
+                                                            <TextBlock Grid.Column="2" Text="{Binding PriorityBadge}" FontSize="10" Foreground="#3B82F6" FontWeight="Bold" VerticalAlignment="Center" />
+                                                        </Grid>
+                                                        <TextBlock Text="{Binding Source}"
+                                                                   FontSize="11"
+                                                                   Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+                                                                   TextTrimming="CharacterEllipsis" />
+                                                    </StackPanel>
+                                                    <TextBlock Grid.Column="3"
+                                                               Text="{Binding SizeDisplay}"
+                                                               FontSize="11"
+                                                               FontFamily="Consolas, Monospace"
+                                                               VerticalAlignment="Center"
+                                                               Margin="12,0" />
+                                                    <Border Grid.Column="4"
+                                                            Background="#1510B981"
+                                                            BorderBrush="#10B981"
+                                                            BorderThickness="1"
+                                                            CornerRadius="4"
+                                                            Padding="6,2"
+                                                            VerticalAlignment="Center"
+                                                            IsVisible="{Binding ExistsInBackup}">
+                                                        <TextBlock Text="Ready" Foreground="#10B981" FontSize="10" FontWeight="Bold" />
+                                                    </Border>
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </ScrollViewer>
+                        </Border>
+
+                        <!-- Target Destination & Drive Remapping Configuration -->
+                        <Border Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"
+                                CornerRadius="8"
+                                Padding="14">
+                            <StackPanel Spacing="10">
+                                <TextBlock Text="RESTORE DESTINATION CONFIGURATION" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                                <Grid ColumnDefinitions="180,12,*">
+                                    <ComboBox Grid.Column="0"
+                                              ItemsSource="{Binding LegacyDestinationModes}"
+                                              SelectedItem="{Binding LegacyDestinationMode}"
+                                              HorizontalAlignment="Stretch" />
+                                    <!-- Custom Folder Path Input -->
+                                    <TextBox Grid.Column="2"
+                                             IsVisible="{Binding IsLegacyCustomFolderMode}"
+                                             Text="{Binding LegacyCustomDestinationPath}"
+                                             Watermark="Target custom folder to restore components into..."
+                                             Padding="10,6"
+                                             CornerRadius="6" />
+                                    <!-- Drive Remapping Options -->
+                                    <Grid Grid.Column="2"
+                                          IsVisible="{Binding !IsLegacyCustomFolderMode}"
+                                          ColumnDefinitions="Auto,8,60,8,Auto,8,60,*">
+                                        <TextBlock Grid.Column="0" Text="Remap Drive:" FontSize="12" VerticalAlignment="Center" />
+                                        <TextBox Grid.Column="2" Text="{Binding LegacyDriveMapFrom}" Padding="6,4" TextAlignment="Center" CornerRadius="4" />
+                                        <TextBlock Grid.Column="4" Text="➔" FontSize="12" VerticalAlignment="Center" />
+                                        <TextBox Grid.Column="6" Text="{Binding LegacyDriveMapTo}" Padding="6,4" TextAlignment="Center" CornerRadius="4" />
+                                        <CheckBox Grid.Column="7"
+                                                  Margin="16,0,0,0"
+                                                  IsChecked="{Binding LegacyOverwriteExisting}"
+                                                  Content="Overwrite existing files if present"
+                                                  VerticalAlignment="Center" />
+                                    </Grid>
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Action Execution Buttons -->
+                        <Grid ColumnDefinitions="*,12,*">
+                            <Button Grid.Column="0"
+                                    Command="{Binding ExecuteLegacyDirectRestoreCommand}"
+                                    IsEnabled="{Binding !IsExecutingLegacyRestore}"
+                                    Background="#10B981"
+                                    Foreground="White"
+                                    HorizontalAlignment="Stretch"
+                                    HorizontalContentAlignment="Center"
+                                    Padding="16,10"
+                                    CornerRadius="6">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <TextBlock Text="⚡ Direct Selective Restore" FontWeight="Bold" FontSize="13" />
+                                    <TextBlock Text="(No Restic Engine Required)" FontSize="11" Opacity="0.85" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
+
+                            <Button Grid.Column="2"
+                                    Command="{Binding MigrateLegacyToResticCommand}"
+                                    IsEnabled="{Binding !IsMigratingLegacy}"
+                                    Background="#6366F1"
+                                    Foreground="White"
+                                    HorizontalAlignment="Stretch"
+                                    HorizontalContentAlignment="Center"
+                                    Padding="16,10"
+                                    CornerRadius="6">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <TextBlock Text="🔒 Ingest &amp; Migrate into Restic" FontWeight="Bold" FontSize="13" />
+                                    <TextBlock Text="(With Original Capture Date)" FontSize="11" Opacity="0.85" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
+                        </Grid>
+
+                        <!-- Execution Progress Bar -->
+                        <ProgressBar IsVisible="{Binding IsExecutingLegacyRestore}" Value="{Binding LegacyProgress}" Minimum="0" Maximum="1" Height="6" CornerRadius="3" />
+                        <ProgressBar IsVisible="{Binding IsMigratingLegacy}" Value="{Binding LegacyProgress}" Minimum="0" Maximum="1" Height="6" CornerRadius="3" />
+
+                        <!-- Result Summary & Logs Console -->
+                        <Border IsVisible="{Binding LegacyResultSummary, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                                Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"
+                                BorderBrush="{DynamicResource SystemControlTransientBorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="8"
+                                Padding="14">
+                            <StackPanel Spacing="8">
+                                <TextBlock Text="{Binding LegacyResultSummary}" FontWeight="Bold" FontSize="12" />
+                                <Border Background="#111827"
+                                        CornerRadius="6"
+                                        Padding="10"
+                                        MaxHeight="120"
+                                        IsVisible="{Binding LegacyExecutionLogs.Count}">
+                                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                        <ItemsControl ItemsSource="{Binding LegacyExecutionLogs}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <TextBlock Text="{Binding}"
+                                                               FontFamily="Consolas, Monospace"
+                                                               FontSize="11"
+                                                               Foreground="#E5E7EB"
+                                                               Margin="0,1" />
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </ScrollViewer>
+                                </Border>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </StackPanel>
             </Border>
 
             <!-- Active Application Conflict Warning Banner -->

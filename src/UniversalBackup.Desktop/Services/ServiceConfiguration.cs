@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using UniversalBackup.Application.Common.Interfaces;
 using UniversalBackup.Application.Services;
 using UniversalBackup.Desktop.ViewModels;
@@ -11,6 +12,7 @@ using UniversalBackup.Infrastructure.Persistence;
 using UniversalBackup.Infrastructure.Persistence.Migrations;
 using UniversalBackup.Infrastructure.Platform;
 using UniversalBackup.Infrastructure.Restic;
+using UniversalBackup.LegacyImport.Services;
 
 namespace UniversalBackup.Desktop.Services;
 
@@ -68,8 +70,11 @@ public static class ServiceConfiguration
         services.AddSingleton<ICloudReplicationCoordinator, CloudReplicationCoordinator>();
         services.AddSingleton<IRetentionPolicyEngine, RetentionPolicyEngine>();
         services.AddSingleton<IVerificationDrillService, VerificationDrillService>();
-        services.AddSingleton<IOSchedulerService>(sp => SchedulerServiceFactory.CreateService(sp.GetService<ICatalogService>()));
-
+        services.AddLogging();
+        services.AddSingleton<ILegacyPathContainmentService, LegacyPathContainmentService>();
+        services.AddSingleton<ILegacyBackupParser, LegacyBackupParser>();
+        services.AddSingleton<ILegacyRestoreService, LegacyRestoreService>();
+        services.AddSingleton<ILegacyMigrationService, LegacyMigrationService>();
 
         // 5. Shell & Page ViewModels
         services.AddSingleton<MainViewModel>();
