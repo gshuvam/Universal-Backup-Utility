@@ -1,6 +1,7 @@
 using System;
 using CommunityToolkit.Mvvm.ComponentModel;
 using UniversalBackup.Domain.Enums;
+using UniversalBackup.Domain.Models;
 
 namespace UniversalBackup.Desktop.Models;
 
@@ -157,3 +158,40 @@ public partial class ActivityLogItemViewModel : ObservableObject
 
     public string FormattedTimestamp => StartTime.ToLocalTime().ToString("MMM dd, yyyy HH:mm");
 }
+
+/// <summary>
+/// Represents a snapshot entry in the interactive Retention Preview drawer.
+/// </summary>
+public partial class RetentionPreviewItemViewModel : ObservableObject
+{
+    [ObservableProperty]
+    private string _snapshotId = string.Empty;
+
+    [ObservableProperty]
+    private DateTimeOffset _timestamp = DateTimeOffset.Now;
+
+    [ObservableProperty]
+    private string _timestampDisplay = string.Empty;
+
+    [ObservableProperty]
+    private string _planName = string.Empty;
+
+    [ObservableProperty]
+    private string _sizeDisplay = "0 B";
+
+    [ObservableProperty]
+    private RetentionDecision _decision = RetentionDecision.Retain;
+
+    [ObservableProperty]
+    private string _decisionBadge = "KEEP";
+
+    [ObservableProperty]
+    private string _decisionBadgeColor = "#10B981";
+
+    [ObservableProperty]
+    private string _matchedRule = string.Empty;
+
+    [ObservableProperty]
+    private bool _isPreserved = true;
+}
+

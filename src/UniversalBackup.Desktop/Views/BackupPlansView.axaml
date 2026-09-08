@@ -145,6 +145,187 @@
                 </StackPanel>
             </Border>
 
+            <!-- 3. Interactive Retention Preview Drawer -->
+            <Border Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
+                    BorderBrush="{DynamicResource SystemControlHighlightAccentBrush}"
+                    BorderThickness="1"
+                    CornerRadius="12"
+                    Padding="24"
+                    IsVisible="{Binding IsRetentionPreviewOpen}">
+                <StackPanel Spacing="16">
+                    <!-- Drawer Header -->
+                    <Grid ColumnDefinitions="*,Auto">
+                        <StackPanel Spacing="4">
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                <TextBlock Text="Retention Policy Simulation &amp; Safe Pruning"
+                                           FontSize="18"
+                                           FontWeight="Bold"
+                                           Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}" />
+                                <Border Background="{DynamicResource SystemControlHighlightAccentBrush}"
+                                        CornerRadius="4" Padding="8,2" VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding SelectedPlanForPreview.Name}" FontSize="12" FontWeight="SemiBold" Foreground="White" />
+                                </Border>
+                            </StackPanel>
+                            <TextBlock Text="Granular snapshot lifecycle simulation with explainable rule matching and guaranteed safeguard protection."
+                                       FontSize="12"
+                                       Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                        </StackPanel>
+
+                        <Button Grid.Column="1"
+                                Command="{Binding CloseRetentionPreviewCommand}"
+                                Padding="10,6"
+                                CornerRadius="6"
+                                ToolTip.Tip="Close Retention Preview">
+                            <TextBlock Text="✕ Close" FontWeight="SemiBold" FontSize="12" />
+                        </Button>
+                    </Grid>
+
+                    <!-- 4 Metric Cards -->
+                    <Grid ColumnDefinitions="*,*,*,*">
+                        <!-- Card 1: Total Snapshots -->
+                        <Border Grid.Column="0" Margin="0,0,8,0"
+                                Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"
+                                CornerRadius="8" Padding="14">
+                            <StackPanel Spacing="4">
+                                <TextBlock Text="Total Evaluated" FontSize="11" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                                <TextBlock Text="{Binding PreviewTotalSnapshots, StringFormat='{}{0} Snapshots'}" FontSize="18" FontWeight="Bold" />
+                                <TextBlock Text="Repository history" FontSize="10" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Card 2: Preserved -->
+                        <Border Grid.Column="1" Margin="4,0,4,0"
+                                Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"
+                                CornerRadius="8" Padding="14">
+                            <StackPanel Spacing="4">
+                                <TextBlock Text="Retained Snapshots" FontSize="11" Foreground="#10B981" />
+                                <TextBlock Text="{Binding PreviewRetainedCount, StringFormat='{}{0} Preserved'}" FontSize="18" FontWeight="Bold" Foreground="#10B981" />
+                                <TextBlock Text="Meets retention rules" FontSize="10" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Card 3: Slated for Prune -->
+                        <Border Grid.Column="2" Margin="4,0,4,0"
+                                Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"
+                                CornerRadius="8" Padding="14">
+                            <StackPanel Spacing="4">
+                                <TextBlock Text="Slated for Prune" FontSize="11" Foreground="#F59E0B" />
+                                <TextBlock Text="{Binding PreviewPrunedCount, StringFormat='{}{0} Eligible'}" FontSize="18" FontWeight="Bold" Foreground="#F59E0B" />
+                                <TextBlock Text="Expired thresholds" FontSize="10" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Card 4: Reclaimable Space -->
+                        <Border Grid.Column="3" Margin="8,0,0,0"
+                                Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"
+                                CornerRadius="8" Padding="14">
+                            <StackPanel Spacing="4">
+                                <TextBlock Text="Reclaimable Space" FontSize="11" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                                <TextBlock Text="{Binding PreviewReclaimableSpace}" FontSize="18" FontWeight="Bold" Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}" />
+                                <TextBlock Text="Estimated disk savings" FontSize="10" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+
+                    <!-- Sole-Snapshot Safeguard Banner -->
+                    <Border Background="#1E3A8A"
+                            BorderBrush="#3B82F6"
+                            BorderThickness="1"
+                            CornerRadius="8"
+                            Padding="14"
+                            IsVisible="{Binding PreviewSafeguardActive}">
+                        <Grid ColumnDefinitions="Auto,*">
+                            <TextBlock Grid.Column="0" Text="🛡️" FontSize="20" VerticalAlignment="Center" Margin="0,0,12,0" />
+                            <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                                <TextBlock Text="Sole-Snapshot Pruning Safeguard: ACTIVE" FontWeight="Bold" FontSize="13" Foreground="#93C5FD" />
+                                <TextBlock Text="{Binding PreviewSafeguardNotice}" FontSize="11" Foreground="#BFDBFE" />
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
+                    <!-- Prune Confirmation Warning Box (Two-Stage Confirmation per AGENTS.md 2.3) -->
+                    <Border Background="#451A03"
+                            BorderBrush="#F59E0B"
+                            BorderThickness="1"
+                            CornerRadius="8"
+                            Padding="16"
+                            IsVisible="{Binding ShowPruneConfirmation}">
+                        <StackPanel Spacing="10">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <TextBlock Text="⚠️" FontSize="16" VerticalAlignment="Center" />
+                                <TextBlock Text="Destructive Operation Confirmation" FontWeight="Bold" FontSize="14" Foreground="#FDE68A" VerticalAlignment="Center" />
+                            </StackPanel>
+                            <TextBlock Text="{Binding PruneConfirmationMessage}" FontSize="12" Foreground="#FEF3C7" TextWrapping="Wrap" />
+                            <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Right">
+                                <Button Content="Cancel" Command="{Binding CancelPruneConfirmationCommand}" Padding="14,6" CornerRadius="4" />
+                                <Button Content="Permanently Prune Snapshots"
+                                        Command="{Binding ExecutePruneNowCommand}"
+                                        Background="#DC2626"
+                                        Foreground="White"
+                                        FontWeight="Bold"
+                                        Padding="14,6"
+                                        CornerRadius="4"
+                                        IsEnabled="{Binding !IsExecutingPrune}" />
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Snapshots List Header -->
+                    <TextBlock Text="Evaluated Snapshots Breakdown" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}" />
+
+                    <!-- Snapshots Table / ItemsControl -->
+                    <Border Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"
+                            CornerRadius="8"
+                            Padding="12">
+                        <StackPanel Spacing="8">
+                            <!-- Table Header -->
+                            <Grid ColumnDefinitions="140,160,100,110,*" Margin="6,0,6,4">
+                                <TextBlock Grid.Column="0" Text="Snapshot ID" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                                <TextBlock Grid.Column="1" Text="Capture Time" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                                <TextBlock Grid.Column="2" Text="Size" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                                <TextBlock Grid.Column="3" Text="Status" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                                <TextBlock Grid.Column="4" Text="Matched Policy Rule / Reason" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                            </Grid>
+
+                            <ItemsControl ItemsSource="{Binding PreviewItems}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="models:RetentionPreviewItemViewModel">
+                                        <Border Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
+                                                CornerRadius="6"
+                                                Padding="10,8"
+                                                Margin="0,0,0,6">
+                                            <Grid ColumnDefinitions="140,160,100,110,*">
+                                                <TextBlock Grid.Column="0" Text="{Binding SnapshotId}" FontFamily="Consolas,monospace" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                                <TextBlock Grid.Column="1" Text="{Binding TimestampDisplay}" FontSize="11" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" VerticalAlignment="Center" />
+                                                <TextBlock Grid.Column="2" Text="{Binding SizeDisplay}" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                                <Border Grid.Column="3" Background="{Binding DecisionBadgeColor}" CornerRadius="4" Padding="6,2" HorizontalAlignment="Left" VerticalAlignment="Center">
+                                                    <TextBlock Text="{Binding DecisionBadge}" FontSize="10" FontWeight="Bold" Foreground="White" />
+                                                </Border>
+                                                <TextBlock Grid.Column="4" Text="{Binding MatchedRule}" FontSize="11" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Drawer Action Footer -->
+                    <Grid ColumnDefinitions="*,Auto" Margin="0,8,0,0">
+                        <TextBlock Grid.Column="0" Text="Simulation dry-run: Repository remains unmodified until you confirm pruning." FontSize="11" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" VerticalAlignment="Center" />
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10">
+                            <Button Content="Close Preview" Command="{Binding CloseRetentionPreviewCommand}" Padding="14,8" CornerRadius="6" />
+                            <Button Content="Apply Retention &amp; Prune..."
+                                    Command="{Binding PromptPruneConfirmationCommand}"
+                                    Classes="accent"
+                                    Padding="16,8"
+                                    CornerRadius="6"
+                                    IsEnabled="{Binding !ShowPruneConfirmation}" />
+                        </StackPanel>
+                    </Grid>
+                </StackPanel>
+            </Border>
+
             <!-- Configured Plans List -->
             <StackPanel Spacing="12">
                 <TextBlock Text="Configured Backup Profiles"

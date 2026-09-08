@@ -15,7 +15,8 @@ public sealed record RetentionExecutionRequest(
     string RepositoryPassword,
     bool DryRun = false,
     bool RunPrune = true,
-    bool FilterByPlanTag = true);
+    bool FilterByPlanTag = true,
+    bool EnforceSoleSnapshotSafeguard = true);
 
 /// <summary>
 /// Quantitative outcome of a retention enforcement or simulation operation.
@@ -69,6 +70,15 @@ public interface IPostBackupLifecycleCoordinator
     /// </summary>
     Task<RetentionExecutionResult> EnforceRetentionAsync(
         RetentionExecutionRequest request,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Generates a detailed dry-run preview simulation of snapshot retention decisions with explainable rule matches
+    /// and Sole-Snapshot Safeguard guarantees without modifying repository contents.
+    /// </summary>
+    Task<RetentionEvaluationResult> PreviewRetentionAsync(
+        RetentionExecutionRequest request,
+        bool enforceSoleSnapshotSafeguard = true,
         CancellationToken cancellationToken = default);
 
     /// <summary>

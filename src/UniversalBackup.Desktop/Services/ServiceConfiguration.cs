@@ -66,6 +66,7 @@ public static class ServiceConfiguration
         services.AddSingleton<IPreimageJournalService, PreimageJournalService>();
         services.AddSingleton<IRestoreExecutionCoordinator, RestoreExecutionCoordinator>();
         services.AddSingleton<ICloudReplicationCoordinator, CloudReplicationCoordinator>();
+        services.AddSingleton<IRetentionPolicyEngine, RetentionPolicyEngine>();
         services.AddSingleton<IOSchedulerService>(sp => SchedulerServiceFactory.CreateService(sp.GetService<ICatalogService>()));
 
 

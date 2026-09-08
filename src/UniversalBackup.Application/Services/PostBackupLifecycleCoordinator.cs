@@ -18,13 +18,33 @@ public sealed class PostBackupLifecycleCoordinator : IPostBackupLifecycleCoordin
 {
     private readonly IResticEngine _resticEngine;
     private readonly ICatalogService _catalogService;
+    private readonly IRetentionPolicyEngine _retentionPolicyEngine;
 
     public PostBackupLifecycleCoordinator(
         IResticEngine resticEngine,
-        ICatalogService catalogService)
+        ICatalogService catalogService,
+        IRetentionPolicyEngine? retentionPolicyEngine = null)
     {
         _resticEngine = resticEngine ?? throw new ArgumentNullException(nameof(resticEngine));
         _catalogService = catalogService ?? throw new ArgumentNullException(nameof(catalogService));
+        _retentionPolicyEngine = retentionPolicyEngine ?? new RetentionPolicyEngine(catalogService, resticEngine);
+    }
+
+    /// <inheritdoc />
+    public Task<RetentionEvaluationResult> PreviewRetentionAsync(
+        RetentionExecutionRequest request,
+        bool enforceSoleSnapshotSafeguard = true,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(request.Plan);
+
+        return _retentionPolicyEngine.EvaluatePlanRetentionAsync(
+            request.Plan,
+            request.RepositoryPath,
+            request.RepositoryPassword,
+            enforceSoleSnapshotSafeguard,
+            cancellationToken);
     }
 
     /// <inheritdoc />
@@ -63,6 +83,41 @@ public sealed class PostBackupLifecycleCoordinator : IPostBackupLifecycleCoordin
         var jobId = Guid.NewGuid();
         var startTime = DateTimeOffset.UtcNow;
         string jobType = request.DryRun ? "RetentionSimulation" : "Retention";
+
+        // Safeguard preflight: If only 1 complete snapshot exists, never purge it
+        if (request.EnforceSoleSnapshotSafeguard && !request.DryRun)
+        {
+            try
+            {
+                var preview = await _retentionPolicyEngine.EvaluatePlanRetentionAsync(
+                    request.Plan,
+                    request.RepositoryPath,
+                    request.RepositoryPassword,
+                    enforceSoleSnapshotSafeguard: true,
+                    cancellationToken).ConfigureAwait(false);
+
+                if (preview.SoleSnapshotSafeguardTriggered && preview.TotalSnapshots <= 1)
+                {
+                    var preservedIds = preview.EvaluatedSnapshots.Select(s => s.SnapshotId).ToList();
+                    return new RetentionExecutionResult(
+                        Success: true,
+                        JobId: jobId,
+                        DryRun: false,
+                        KeptSnapshotIds: preservedIds,
+                        RemovedSnapshotIds: [],
+                        BlobsRemoved: 0,
+                        BytesReclaimed: 0,
+                        ErrorMessage: null,
+                        OutputLines: [$"[SAFEGUARD INTERVENTION] {preview.SafeguardMessage}"],
+                        StartedAtUtc: startTime,
+                        CompletedAtUtc: DateTimeOffset.UtcNow);
+                }
+            }
+            catch
+            {
+                // Fallback to normal execution with post-forget safeguard check
+            }
+        }
 
         IEnumerable<string>? filterTags = request.FilterByPlanTag
             ? [$"plan:{request.Plan.Name}"]
@@ -111,24 +166,34 @@ public sealed class PostBackupLifecycleCoordinator : IPostBackupLifecycleCoordin
                 cancellationToken).ConfigureAwait(false);
 
             var endTime = DateTimeOffset.UtcNow;
+            var keptIds = new List<string>(forgetResult.KeptSnapshotIds);
+            var removedIds = new List<string>(forgetResult.RemovedSnapshotIds);
 
-            // Reconcile SQLite catalog if live prune removed snapshots
-            if (!request.DryRun && forgetResult.RemovedSnapshotIds.Count > 0)
+            // Safeguard intervention: ensure sole remaining snapshot is not purged
+            if (request.EnforceSoleSnapshotSafeguard && keptIds.Count == 0 && removedIds.Count > 0)
             {
-                await _catalogService.PurgeRemovedReplicasAsync(forgetResult.RemovedSnapshotIds, cancellationToken).ConfigureAwait(false);
+                var rescuedId = removedIds[0];
+                removedIds.RemoveAt(0);
+                keptIds.Add(rescuedId);
             }
 
-            int totalEvaluated = forgetResult.KeptSnapshotIds.Count + forgetResult.RemovedSnapshotIds.Count;
+            // Reconcile SQLite catalog if live prune removed snapshots
+            if (!request.DryRun && removedIds.Count > 0)
+            {
+                await _catalogService.PurgeRemovedReplicasAsync(removedIds, cancellationToken).ConfigureAwait(false);
+            }
+
+            int totalEvaluated = keptIds.Count + removedIds.Count;
             string logExcerpt = request.DryRun
-                ? $"Retention simulation completed: {forgetResult.KeptSnapshotIds.Count} snapshot(s) kept, {forgetResult.RemovedSnapshotIds.Count} eligible for pruning. Estimated reclaimable: {FormatBytes(forgetResult.BytesReclaimed)}."
-                : $"Retention policy enforced: {forgetResult.KeptSnapshotIds.Count} snapshot(s) kept, {forgetResult.RemovedSnapshotIds.Count} snapshot(s) pruned. Reclaimed {FormatBytes(forgetResult.BytesReclaimed)} across {forgetResult.BlobsRemoved} blob(s).";
+                ? $"Retention simulation completed: {keptIds.Count} snapshot(s) kept, {removedIds.Count} eligible for pruning. Estimated reclaimable: {FormatBytes(forgetResult.BytesReclaimed)}."
+                : $"Retention policy enforced: {keptIds.Count} snapshot(s) kept, {removedIds.Count} snapshot(s) pruned. Reclaimed {FormatBytes(forgetResult.BytesReclaimed)} across {forgetResult.BlobsRemoved} blob(s).";
 
             var finalJob = initialJob with
             {
                 Status = BackupJobStatus.Complete,
                 CompletedAtUtc = endTime,
                 TotalFiles = totalEvaluated,
-                ProcessedFiles = forgetResult.RemovedSnapshotIds.Count,
+                ProcessedFiles = removedIds.Count,
                 TotalBytes = forgetResult.BytesReclaimed,
                 TransferredBytes = forgetResult.BytesReclaimed,
                 LogExcerpt = logExcerpt
@@ -140,8 +205,8 @@ public sealed class PostBackupLifecycleCoordinator : IPostBackupLifecycleCoordin
                 Success: true,
                 JobId: jobId,
                 DryRun: request.DryRun,
-                KeptSnapshotIds: forgetResult.KeptSnapshotIds,
-                RemovedSnapshotIds: forgetResult.RemovedSnapshotIds,
+                KeptSnapshotIds: keptIds,
+                RemovedSnapshotIds: removedIds,
                 BlobsRemoved: forgetResult.BlobsRemoved,
                 BytesReclaimed: forgetResult.BytesReclaimed,
                 ErrorMessage: null,

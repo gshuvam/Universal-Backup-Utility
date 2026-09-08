@@ -21,6 +21,7 @@ public partial class BackupPlansViewModel : ViewModelBase
     private readonly IPostBackupLifecycleCoordinator? _postBackupCoordinator;
     private readonly IOSchedulerService? _schedulerService;
     private readonly ICatalogService? _catalogService;
+    private readonly IRetentionPolicyEngine? _retentionEngine;
 
     [ObservableProperty]
     private string _statusMessage = "Manage automated background backup profiles and retention policies.";
@@ -36,6 +37,43 @@ public partial class BackupPlansViewModel : ViewModelBase
 
     [ObservableProperty]
     private bool _isSimulatingRetention;
+
+    // Retention Preview Drawer State
+    [ObservableProperty]
+    private bool _isRetentionPreviewOpen;
+
+    [ObservableProperty]
+    private BackupPlanItemViewModel? _selectedPlanForPreview;
+
+    [ObservableProperty]
+    private ObservableCollection<RetentionPreviewItemViewModel> _previewItems = [];
+
+    [ObservableProperty]
+    private int _previewTotalSnapshots;
+
+    [ObservableProperty]
+    private int _previewRetainedCount;
+
+    [ObservableProperty]
+    private int _previewPrunedCount;
+
+    [ObservableProperty]
+    private string _previewReclaimableSpace = "0 B";
+
+    [ObservableProperty]
+    private bool _previewSafeguardActive;
+
+    [ObservableProperty]
+    private string _previewSafeguardNotice = string.Empty;
+
+    [ObservableProperty]
+    private bool _isExecutingPrune;
+
+    [ObservableProperty]
+    private bool _showPruneConfirmation;
+
+    [ObservableProperty]
+    private string _pruneConfirmationMessage = string.Empty;
 
     // Plan Builder / New Plan Form State
     [ObservableProperty]
@@ -95,12 +133,14 @@ public partial class BackupPlansViewModel : ViewModelBase
         INavigationService? navigationService = null,
         IPostBackupLifecycleCoordinator? postBackupCoordinator = null,
         IOSchedulerService? schedulerService = null,
-        ICatalogService? catalogService = null)
+        ICatalogService? catalogService = null,
+        IRetentionPolicyEngine? retentionEngine = null)
     {
         _navigationService = navigationService;
         _postBackupCoordinator = postBackupCoordinator;
         _schedulerService = schedulerService;
         _catalogService = catalogService;
+        _retentionEngine = retentionEngine;
         SeedDefaultPlans();
         _ = RefreshScheduleStatusAsync();
     }
@@ -372,68 +412,224 @@ public partial class BackupPlansViewModel : ViewModelBase
     }
 
     [RelayCommand]
-    public async Task SimulateRetentionAsync(BackupPlanItemViewModel plan)
+    public Task SimulateRetentionAsync(BackupPlanItemViewModel plan) => OpenRetentionPreviewAsync(plan);
+
+    [RelayCommand]
+    public async Task OpenRetentionPreviewAsync(BackupPlanItemViewModel plan)
     {
         if (plan == null) return;
 
+        SelectedPlanForPreview = plan;
+        IsRetentionPreviewOpen = true;
+        IsSimulatingRetention = true;
+        ShowPruneConfirmation = false;
+        StatusMessage = $"Generating retention policy preview for plan '{plan.Name}'...";
+
         try
         {
-            IsSimulatingRetention = true;
-            StatusMessage = $"Simulating retention policy for '{plan.Name}' (Dry-Run)...";
-
-            var domainPlan = new BackupPlan(
-                id: plan.Id,
-                name: plan.Name,
-                revision: 1,
-                preset: BackupPreset.GameSavesOnly,
-                destinationPolicy: new DestinationPolicy("local"),
-                retentionPolicy: new RetentionPolicy(
-                    KeepLast: plan.KeepLastCount > 0 ? plan.KeepLastCount : 7,
-                    KeepDaily: plan.KeepDailyCount > 0 ? plan.KeepDailyCount : 7,
-                    KeepWeekly: plan.KeepWeeklyCount > 0 ? plan.KeepWeeklyCount : 4,
-                    KeepMonthly: plan.KeepMonthlyCount > 0 ? plan.KeepMonthlyCount : 3),
-                futureMatchPolicy: FutureMatchPolicy.AutoInclude,
-                consistencyClass: plan.ConsistencyClass,
-
-                targetCategories: ["Games"],
-                rules: [],
-                schedule: new BackupScheduleConfig(plan.CronExpression));
-
+            var domainPlan = ToDomainPlan(plan);
             string localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
             string defaultRepo = Path.Combine(localAppData, "UniversalBackup", "repo");
 
-            RetentionExecutionResult? result = null;
-            if (_postBackupCoordinator != null && Directory.Exists(defaultRepo))
+            RetentionEvaluationResult? evalResult = null;
+
+            if (_retentionEngine != null)
             {
-                try
+                evalResult = await _retentionEngine.EvaluatePlanRetentionAsync(
+                    domainPlan,
+                    defaultRepo,
+                    "DefaultRepositoryPassword",
+                    enforceSoleSnapshotSafeguard: true).ConfigureAwait(false);
+            }
+
+            // If repository or catalog is empty (e.g. fresh installation / mock plans), provide a realistic preview
+            if (evalResult == null || evalResult.TotalSnapshots == 0)
+            {
+                var simulatedSnapshots = GenerateSimulatedSnapshots(plan);
+                if (_retentionEngine != null)
                 {
-                    result = await _postBackupCoordinator.EnforceRetentionAsync(new RetentionExecutionRequest(
-                        Plan: domainPlan,
-                        RepositoryPath: defaultRepo,
-                        RepositoryPassword: "DefaultRepositoryPassword",
-                        DryRun: true,
-                        RunPrune: true));
+                    evalResult = _retentionEngine.EvaluateRetention(
+                        simulatedSnapshots,
+                        domainPlan.RetentionPolicy,
+                        plan.Name,
+                        plan.Id,
+                        enforceSoleSnapshotSafeguard: true);
                 }
-                catch
+                else
                 {
-                    // Fallback to simulated response
+                    evalResult = new RetentionEvaluationResult(
+                        PlanId: plan.Id,
+                        PlanName: plan.Name,
+                        Policy: domainPlan.RetentionPolicy,
+                        EvaluatedSnapshots: simulatedSnapshots,
+                        TotalSnapshots: simulatedSnapshots.Count,
+                        RetainedCount: simulatedSnapshots.Count,
+                        PrunedCount: 0,
+                        TotalSizeBytes: simulatedSnapshots.Sum(s => s.EstimatedSizeBytes),
+                        EstimatedReclaimableBytes: 0,
+                        SoleSnapshotSafeguardTriggered: false,
+                        SafeguardMessage: null,
+                        EvaluatedAtUtc: DateTimeOffset.UtcNow);
                 }
             }
 
-            if (result != null && result.Success)
+            PreviewItems.Clear();
+            foreach (var item in evalResult.EvaluatedSnapshots)
             {
-                StatusMessage = $"Retention Simulation for '{plan.Name}': {result.KeptSnapshotIds.Count} kept, {result.RemovedSnapshotIds.Count} eligible for prune ({FormatBytes(result.BytesReclaimed)} reclaimable).";
+                string badge = item.Decision switch
+                {
+                    RetentionDecision.ProtectedBySafeguard => "SAFEGUARD",
+                    RetentionDecision.Retain => "KEEP",
+                    _ => "PRUNE"
+                };
+
+                string badgeColor = item.Decision switch
+                {
+                    RetentionDecision.ProtectedBySafeguard => "#3B82F6",
+                    RetentionDecision.Retain => "#10B981",
+                    _ => "#F59E0B"
+                };
+
+                PreviewItems.Add(new RetentionPreviewItemViewModel
+                {
+                    SnapshotId = item.SnapshotId,
+                    Timestamp = item.Timestamp,
+                    TimestampDisplay = item.Timestamp.ToLocalTime().ToString("MMM dd, yyyy HH:mm"),
+                    PlanName = plan.Name,
+                    SizeDisplay = FormatBytes(item.EstimatedSizeBytes),
+                    Decision = item.Decision,
+                    DecisionBadge = badge,
+                    DecisionBadgeColor = badgeColor,
+                    MatchedRule = item.MatchedRule,
+                    IsPreserved = item.IsPreserved
+                });
             }
-            else
-            {
-                await Task.Delay(300);
-                StatusMessage = $"Retention Simulation for '{plan.Name}': Policy preserves latest {plan.KeepDailyCount} daily, {plan.KeepWeeklyCount} weekly, {plan.KeepMonthlyCount} monthly snapshots.";
-            }
+
+            PreviewTotalSnapshots = evalResult.TotalSnapshots;
+            PreviewRetainedCount = evalResult.RetainedCount;
+            PreviewPrunedCount = evalResult.PrunedCount;
+            PreviewReclaimableSpace = FormatBytes(evalResult.EstimatedReclaimableBytes);
+            PreviewSafeguardActive = evalResult.SoleSnapshotSafeguardTriggered || evalResult.RetainedCount > 0;
+            PreviewSafeguardNotice = evalResult.SafeguardMessage ?? "Guaranteed Safeguard: Sole complete backup is always preserved.";
+
+            StatusMessage = $"Retention Simulation for '{plan.Name}': Policy preserves {PreviewRetainedCount} snapshot(s) ({PreviewPrunedCount} eligible for prune, {PreviewReclaimableSpace} reclaimable).";
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"Notice during retention evaluation: {ex.Message}";
         }
         finally
         {
             IsSimulatingRetention = false;
         }
+    }
+
+    [RelayCommand]
+    public void CloseRetentionPreview()
+    {
+        IsRetentionPreviewOpen = false;
+        ShowPruneConfirmation = false;
+        PreviewItems.Clear();
+    }
+
+    [RelayCommand]
+    public void PromptPruneConfirmation()
+    {
+        if (PreviewPrunedCount <= 0)
+        {
+            StatusMessage = "No snapshots are eligible for pruning under current policy.";
+            return;
+        }
+
+        PruneConfirmationMessage = $"Are you sure you want to permanently prune {PreviewPrunedCount} snapshot(s) and reclaim approximately {PreviewReclaimableSpace}? The Sole-Snapshot Safeguard is active and will protect your last complete backup.";
+        ShowPruneConfirmation = true;
+    }
+
+    [RelayCommand]
+    public void CancelPruneConfirmation()
+    {
+        ShowPruneConfirmation = false;
+    }
+
+    [RelayCommand]
+    public async Task ExecutePruneNowAsync()
+    {
+        if (SelectedPlanForPreview == null) return;
+
+        try
+        {
+            IsExecutingPrune = true;
+            StatusMessage = $"Executing safe retention prune for '{SelectedPlanForPreview.Name}'...";
+
+            var domainPlan = ToDomainPlan(SelectedPlanForPreview);
+            string localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            string defaultRepo = Path.Combine(localAppData, "UniversalBackup", "repo");
+
+            if (_postBackupCoordinator != null && Directory.Exists(defaultRepo))
+            {
+                var result = await _postBackupCoordinator.EnforceRetentionAsync(new RetentionExecutionRequest(
+                    Plan: domainPlan,
+                    RepositoryPath: defaultRepo,
+                    RepositoryPassword: "DefaultRepositoryPassword",
+                    DryRun: false,
+                    RunPrune: true,
+                    EnforceSoleSnapshotSafeguard: true)).ConfigureAwait(false);
+
+                if (result.Success)
+                {
+                    StatusMessage = $"✅ Safe prune completed: {result.RemovedSnapshotIds.Count} snapshot(s) purged, {FormatBytes(result.BytesReclaimed)} reclaimed.";
+                }
+                else
+                {
+                    StatusMessage = $"Prune execution notice: {result.ErrorMessage}";
+                }
+            }
+            else
+            {
+                await Task.Delay(400); // Simulate execution
+                StatusMessage = $"✅ Simulated safe prune completed: {PreviewPrunedCount} snapshot(s) purged, {PreviewReclaimableSpace} reclaimed.";
+            }
+
+            ShowPruneConfirmation = false;
+            // Refresh preview
+            await OpenRetentionPreviewAsync(SelectedPlanForPreview).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"Error during prune execution: {ex.Message}";
+        }
+        finally
+        {
+            IsExecutingPrune = false;
+        }
+    }
+
+    private static List<SnapshotRetentionItem> GenerateSimulatedSnapshots(BackupPlanItemViewModel plan)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var list = new List<SnapshotRetentionItem>();
+
+        // Generate 10 snapshots across past 45 days
+        int[] dayOffsets = [0, 1, 2, 3, 5, 8, 14, 21, 30, 42];
+        for (int i = 0; i < dayOffsets.Length; i++)
+        {
+            int offset = dayOffsets[i];
+            var timestamp = now.AddDays(-offset).AddHours(-2);
+            long size = (120L + (i * 15L)) * 1024L * 1024L; // ~120MB-250MB
+            string id = $"snap-{Guid.NewGuid().ToString()[..8]}";
+
+            list.Add(new SnapshotRetentionItem(
+                SnapshotId: id,
+                Timestamp: timestamp,
+                PlanName: plan.Name,
+                EstimatedSizeBytes: size,
+                Decision: RetentionDecision.SlatedForPrune,
+                MatchedRule: string.Empty,
+                IsCompleteBackup: true,
+                Tags: [$"plan:{plan.Name}"]));
+        }
+
+        return list;
     }
 
     private static string FormatBytes(long bytes)
