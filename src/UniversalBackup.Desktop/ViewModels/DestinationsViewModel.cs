@@ -594,7 +594,6 @@ public partial class DestinationsViewModel : ViewModelBase
             {
                 ReplicationProgressPercent = p.PercentDone;
                 ReplicationStatusMessage = p.StatusMessage;
-                StatusMessage = p.StatusMessage;
             });
 
             var result = await _replicationCoordinator.ReplicateBackupSetAsync(
