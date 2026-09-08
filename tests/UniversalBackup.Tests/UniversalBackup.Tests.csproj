@@ -30,6 +30,7 @@
     <ProjectReference Include="..\..\src\UniversalBackup.LegacyImport\UniversalBackup.LegacyImport.csproj" />
     <ProjectReference Include="..\..\src\UniversalBackup.PrivilegedHelper\UniversalBackup.PrivilegedHelper.csproj" />
     <ProjectReference Include="..\..\src\UniversalBackup.Desktop\UniversalBackup.Desktop.csproj" />
+    <ProjectReference Include="..\..\src\UniversalBackup.Cli\UniversalBackup.Cli.csproj" />
   </ItemGroup>
 
 </Project>

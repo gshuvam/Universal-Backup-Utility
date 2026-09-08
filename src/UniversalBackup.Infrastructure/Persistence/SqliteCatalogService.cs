@@ -674,7 +674,13 @@ public sealed class SqliteCatalogService : ICatalogService
                     else if (tag.StartsWith("role:", StringComparison.OrdinalIgnoreCase))
                     {
                         string roleStr = tag["role:".Length..];
-                        if (Enum.TryParse<SnapshotRole>(roleStr, ignoreCase: true, out var parsedRole))
+                        if (string.Equals(roleStr, "receipt", StringComparison.OrdinalIgnoreCase) ||
+                            string.Equals(roleStr, "control", StringComparison.OrdinalIgnoreCase) ||
+                            string.Equals(roleStr, "receiptcontrol", StringComparison.OrdinalIgnoreCase))
+                        {
+                            role = SnapshotRole.ReceiptControl;
+                        }
+                        else if (Enum.TryParse<SnapshotRole>(roleStr, ignoreCase: true, out var parsedRole))
                         {
                             role = parsedRole;
                         }

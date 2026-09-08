@@ -197,6 +197,51 @@
                 </StackPanel>
             </Border>
 
+            <!-- 5. Disaster Recovery & Emergency Kit Card -->
+            <Border Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
+                    BorderBrush="{DynamicResource SystemControlTransientBorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    Padding="20">
+                <StackPanel Spacing="14">
+                    <Grid ColumnDefinitions="*,Auto">
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="Disaster Recovery &amp; Emergency Kit" FontSize="15" FontWeight="Bold" />
+                            <TextBlock Text="Export self-contained documentation with pure restic &amp; rclone CLI commands for total catalog-independent disaster recovery."
+                                       FontSize="12" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                        </StackPanel>
+
+                        <Button Grid.Column="1"
+                                Command="{Binding ExportEmergencyRecoveryKitCommand}"
+                                IsEnabled="{Binding !IsGeneratingRecoveryKit}"
+                                Classes="accent"
+                                Padding="14,8"
+                                CornerRadius="6"
+                                VerticalAlignment="Center">
+                            <TextBlock Text="📄 Export Recovery Kit" FontWeight="SemiBold" FontSize="12" />
+                        </Button>
+                    </Grid>
+
+                    <Border Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"
+                            BorderBrush="{DynamicResource SystemControlTransientBorderBrush}"
+                            BorderThickness="1"
+                            CornerRadius="6"
+                            Padding="12">
+                        <StackPanel Spacing="6">
+                            <TextBlock Text="100% Zero-Dependency Guarantee (ADR-004)" FontWeight="SemiBold" FontSize="12" Foreground="#3B82F6" />
+                            <TextBlock Text="Even if this machine suffers catastrophic hardware failure and the local catalog is destroyed, you can restore all files on any fresh OS using standard restic binaries."
+                                       FontSize="11" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" TextWrapping="Wrap" />
+                            <TextBlock Text="{Binding RecoveryKitStatusMessage}"
+                                       FontSize="11"
+                                       FontWeight="Medium"
+                                       Foreground="#10B981"
+                                       Margin="0,4,0,0"
+                                       TextWrapping="Wrap" />
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </Border>
+
             <!-- Status Banner -->
             <TextBlock Text="{Binding StatusMessage}"
                        FontSize="12"

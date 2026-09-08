@@ -1,6 +1,8 @@
 using System;
 using System.Collections.ObjectModel;
 using System.IO;
+using System.Linq;
+using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using UniversalBackup.Application.Common.Interfaces;
@@ -15,9 +17,17 @@ public partial class SettingsViewModel : ViewModelBase
 {
     private readonly IThemeService _themeService;
     private readonly IResticBinaryResolver? _resticResolver;
+    private readonly IEmergencyRecoveryKitService? _recoveryKitService;
+    private readonly ICatalogService? _catalogService;
 
     [ObservableProperty]
     private AppTheme _selectedTheme;
+
+    [ObservableProperty]
+    private string _recoveryKitStatusMessage = "Generate a self-contained HTML/Markdown guide with direct restic CLI commands for disaster recovery.";
+
+    [ObservableProperty]
+    private bool _isGeneratingRecoveryKit;
 
     [ObservableProperty]
     private string _resticPath = "Auto-detecting...";
@@ -58,10 +68,16 @@ public partial class SettingsViewModel : ViewModelBase
     [ObservableProperty]
     private string _statusMessage = "Application preferences and engine configurations.";
 
-    public SettingsViewModel(IThemeService themeService, IResticBinaryResolver? resticResolver = null)
+    public SettingsViewModel(
+        IThemeService themeService,
+        IResticBinaryResolver? resticResolver = null,
+        IEmergencyRecoveryKitService? recoveryKitService = null,
+        ICatalogService? catalogService = null)
     {
         _themeService = themeService;
         _resticResolver = resticResolver;
+        _recoveryKitService = recoveryKitService;
+        _catalogService = catalogService;
         _selectedTheme = themeService.CurrentTheme;
         _themeService.ThemeChanged += OnThemeChanged;
 
@@ -140,5 +156,74 @@ public partial class SettingsViewModel : ViewModelBase
     public void SavePreferences()
     {
         StatusMessage = "Preferences and guardian policies saved successfully.";
+    }
+
+    [RelayCommand]
+    public async Task ExportEmergencyRecoveryKitAsync()
+    {
+        if (_recoveryKitService == null)
+        {
+            RecoveryKitStatusMessage = "Emergency recovery kit service is not configured.";
+            return;
+        }
+
+        IsGeneratingRecoveryKit = true;
+        try
+        {
+            string repoPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "UniversalBackups");
+            string? latestPayload = null;
+            string? latestReceipt = null;
+
+            if (_catalogService != null)
+            {
+                var sets = await _catalogService.GetBackupSetsAsync();
+                var latestSet = sets.FirstOrDefault();
+                if (latestSet != null)
+                {
+                    var replicas = await _catalogService.GetReplicasForBackupSetAsync(latestSet.Id);
+                    var payload = replicas.FirstOrDefault(r => r.Role == UniversalBackup.Domain.Enums.SnapshotRole.Payload);
+                    var receipt = replicas.FirstOrDefault(r => r.Role == UniversalBackup.Domain.Enums.SnapshotRole.ReceiptControl);
+                    latestPayload = payload?.EngineSnapshotId;
+                    latestReceipt = receipt?.EngineSnapshotId;
+                    if (payload != null && !string.IsNullOrWhiteSpace(payload.RepositoryId))
+                    {
+                        repoPath = payload.RepositoryId;
+                    }
+                }
+            }
+
+            var options = new EmergencyRecoveryKitOptions(
+                RepositoryPath: repoPath,
+                RepositoryPasswordHint: "Standard Master Password (configured at repo init)",
+                PlanName: "Universal System Protection",
+                LatestPayloadSnapshotId: latestPayload,
+                LatestReceiptSnapshotId: latestReceipt,
+                MachineName: Environment.MachineName,
+                UserName: Environment.UserName,
+                ProtectedComponents: ["Steam & PC Games", "Browsers & Profiles", "Documents & Media", "System Settings"]);
+
+            string targetDir = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
+            if (string.IsNullOrEmpty(targetDir) || !Directory.Exists(targetDir))
+            {
+                targetDir = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            }
+
+            string htmlFile = Path.Combine(targetDir, "UniversalBackup_Emergency_Recovery_Kit.html");
+            string mdFile = Path.Combine(targetDir, "UniversalBackup_Emergency_Recovery_Kit.md");
+
+            await _recoveryKitService.SaveRecoveryKitAsync(options, htmlFile, html: true);
+            await _recoveryKitService.SaveRecoveryKitAsync(options, mdFile, html: false);
+
+            RecoveryKitStatusMessage = $"✓ Kit exported: {Path.GetFileName(htmlFile)} & {Path.GetFileName(mdFile)} saved to {targetDir}";
+            StatusMessage = "Emergency Recovery Kit generated successfully.";
+        }
+        catch (Exception ex)
+        {
+            RecoveryKitStatusMessage = $"Failed to export recovery kit: {ex.Message}";
+        }
+        finally
+        {
+            IsGeneratingRecoveryKit = false;
+        }
     }
 }

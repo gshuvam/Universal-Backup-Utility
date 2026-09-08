@@ -75,6 +75,7 @@ public static class ServiceConfiguration
         services.AddSingleton<ILegacyBackupParser, LegacyBackupParser>();
         services.AddSingleton<ILegacyRestoreService, LegacyRestoreService>();
         services.AddSingleton<ILegacyMigrationService, LegacyMigrationService>();
+        services.AddSingleton<IEmergencyRecoveryKitService, EmergencyRecoveryKitService>();
 
         // 5. Shell & Page ViewModels
         services.AddSingleton<MainViewModel>();
