@@ -64,6 +64,18 @@ public partial class BackupPlanItemViewModel : ObservableObject
     private string _retentionSummary = "Keep 14 daily";
 
     [ObservableProperty]
+    private int _keepLastCount = 7;
+
+    [ObservableProperty]
+    private int _keepDailyCount = 7;
+
+    [ObservableProperty]
+    private int _keepWeeklyCount = 4;
+
+    [ObservableProperty]
+    private int _keepMonthlyCount = 3;
+
+    [ObservableProperty]
     private bool _isActive = true;
 
     [ObservableProperty]
@@ -75,6 +87,7 @@ public partial class BackupPlanItemViewModel : ObservableObject
     [ObservableProperty]
     private bool _suppressDuringGaming = true;
 }
+
 
 /// <summary>
 /// Represents an execution record in the Activity and Audit Journal view.
@@ -111,7 +124,18 @@ public partial class ActivityLogItemViewModel : ObservableObject
     private string _consistencyClass = "Filesystem Snapshot (VSS)";
 
     [ObservableProperty]
+    private string _jobType = "Backup";
+
+    [ObservableProperty]
+    private string _freedSpaceText = "0 B";
+
+
+    [ObservableProperty]
     private string _logDetails = string.Empty;
+
+    public bool IsRetentionJob => JobType.Contains("Retention", StringComparison.OrdinalIgnoreCase);
+    public bool IsVerificationJob => JobType.Contains("Verification", StringComparison.OrdinalIgnoreCase);
+
 
     public string StatusBadgeColor => Status switch
     {

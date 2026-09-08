@@ -40,6 +40,17 @@ public interface ICatalogService
     Task SaveBackupSetAsync(BackupSet backupSet, SnapshotReplica replica, CancellationToken ct = default);
 
     /// <summary>
+    /// Saves a dated backup set and its associated snapshot replicas within an atomic transaction.
+    /// Supports the dual-snapshot commit protocol (payload replica + control receipt replica).
+    /// </summary>
+    Task SaveBackupSetAsync(BackupSet backupSet, IEnumerable<SnapshotReplica> replicas, CancellationToken ct = default);
+
+    /// <summary>
+    /// Saves or updates a single snapshot replica.
+    /// </summary>
+    Task SaveReplicaAsync(SnapshotReplica replica, CancellationToken ct = default);
+
+    /// <summary>
     /// Retrieves all recorded backup sets ordered by capture start time descending.
     /// </summary>
     Task<IReadOnlyList<BackupSet>> GetBackupSetsAsync(CancellationToken ct = default);
@@ -63,5 +74,12 @@ public interface ICatalogService
         string password,
         IResticEngine resticEngine,
         CancellationToken ct = default);
+
+    /// <summary>
+    /// Synchronizes the local catalog after a restic forget/prune operation by deleting
+    /// removed replicas and cleaning up orphaned snapshots that no longer have replicas.
+    /// </summary>
+    Task PurgeRemovedReplicasAsync(IEnumerable<string> removedEngineSnapshotIds, CancellationToken ct = default);
 }
+
 

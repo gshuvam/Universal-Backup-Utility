@@ -30,3 +30,31 @@ public sealed record ResticPruneResult(
     long BlobsRemoved,
     long BytesReclaimed,
     IReadOnlyList<string> OutputLines);
+
+/// <summary>
+/// Configuration options for restic forget retention policy enforcement.
+/// </summary>
+public sealed record ResticForgetOptions(
+    int? KeepLast = null,
+    int? KeepHourly = null,
+    int? KeepDaily = null,
+    int? KeepWeekly = null,
+    int? KeepMonthly = null,
+    int? KeepYearly = null,
+    IEnumerable<string>? KeepTags = null,
+    IEnumerable<string>? FilterTags = null,
+    bool Prune = false,
+    bool DryRun = false,
+    string? GroupBy = null);
+
+/// <summary>
+/// Execution summary result of a repository forget and retention enforcement operation.
+/// </summary>
+public sealed record ResticForgetResult(
+    bool Success,
+    IReadOnlyList<string> KeptSnapshotIds,
+    IReadOnlyList<string> RemovedSnapshotIds,
+    long BlobsRemoved,
+    long BytesReclaimed,
+    IReadOnlyList<string> OutputLines);
+

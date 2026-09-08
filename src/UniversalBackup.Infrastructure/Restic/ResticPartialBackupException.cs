@@ -2,14 +2,11 @@ using UniversalBackup.Application.DTOs;
 
 namespace UniversalBackup.Infrastructure.Restic;
 
-public class ResticPartialBackupException : ResticException
+public class ResticPartialBackupException : Application.Exceptions.ResticPartialBackupException
 {
-    public ResticSummaryEvent? Summary { get; }
-
     public ResticPartialBackupException(ResticSummaryEvent? summary, string standardError, string commandLine)
-        : base(3, standardError, commandLine)
+        : base(summary, standardError, commandLine)
     {
-        Summary = summary;
     }
 }
 

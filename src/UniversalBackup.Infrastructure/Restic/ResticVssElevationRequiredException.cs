@@ -1,6 +1,6 @@
 namespace UniversalBackup.Infrastructure.Restic;
 
-public class ResticVssElevationRequiredException : ResticException
+public class ResticVssElevationRequiredException : Application.Exceptions.ResticVssElevationRequiredException
 {
     public bool IsElevationRequired => true;
 

@@ -24,6 +24,7 @@ public sealed record OAuthSessionState
     public required string CodeChallenge { get; init; }
     public required string RedirectUri { get; init; }
     public required string AuthorizationUrl { get; init; }
+    public string? ClientId { get; init; }
     public DateTime CreatedAtUtc { get; init; } = DateTime.UtcNow;
 }
 
@@ -38,6 +39,26 @@ public sealed record OAuthTokenResponse
     public int ExpiresIn { get; init; }
     public DateTime ExpiresAtUtc { get; init; }
     public required string Scope { get; init; }
+    public string? AccountEmail { get; init; }
+    public string? AccountDisplayName { get; init; }
+
+    /// <summary>
+    /// Determines whether the token is currently expired or within the 5-minute safety renewal window.
+    /// </summary>
+    public bool IsExpired => DateTime.UtcNow >= ExpiresAtUtc.AddMinutes(-5);
+}
+
+/// <summary>
+/// Status and account information for an active cloud replica connection.
+/// </summary>
+public sealed record CloudAccountInfo
+{
+    public required CloudProvider Provider { get; init; }
+    public required string AccountIdentifier { get; init; }
+    public DateTimeOffset ConnectedAtUtc { get; init; } = DateTimeOffset.UtcNow;
+    public required string Scope { get; init; }
+    public bool IsConnected { get; init; }
+    public DateTimeOffset? ExpiresAtUtc { get; init; }
 }
 
 /// <summary>
@@ -55,4 +76,3 @@ public sealed record LudusaviLicenseAudit
     public required string RequiredAttribution { get; init; }
     public required string RecommendedNotice { get; init; }
 }
-

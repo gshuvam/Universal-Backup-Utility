@@ -87,6 +87,11 @@ public enum SnapshotRole
     ReceiptControl,
 
     /// <summary>
+    /// Alias for ReceiptControl.
+    /// </summary>
+    Control = ReceiptControl,
+
+    /// <summary>
     /// Standalone snapshot created without dual-snapshot control protocol.
     /// </summary>
     Standalone

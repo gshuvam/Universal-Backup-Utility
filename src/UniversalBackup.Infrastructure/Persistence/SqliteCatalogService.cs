@@ -335,10 +335,18 @@ public sealed class SqliteCatalogService : ICatalogService
     }
 
     /// <inheritdoc />
-    public async Task SaveBackupSetAsync(BackupSet backupSet, SnapshotReplica replica, CancellationToken ct = default)
+    public Task SaveBackupSetAsync(BackupSet backupSet, SnapshotReplica replica, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(backupSet);
         ArgumentNullException.ThrowIfNull(replica);
+        return SaveBackupSetAsync(backupSet, [replica], ct);
+    }
+
+    /// <inheritdoc />
+    public async Task SaveBackupSetAsync(BackupSet backupSet, IEnumerable<SnapshotReplica> replicas, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(backupSet);
+        ArgumentNullException.ThrowIfNull(replicas);
 
         using var conn = await _connectionFactory.CreateOpenConnectionAsync(ct).ConfigureAwait(false);
         using var tx = conn.BeginTransaction();
@@ -388,9 +396,10 @@ public sealed class SqliteCatalogService : ICatalogService
                 await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
             }
 
-            // 2. Upsert Replica
-            using (var cmd = conn.CreateCommand())
+            // 2. Upsert Replicas
+            foreach (var replica in replicas)
             {
+                using var cmd = conn.CreateCommand();
                 cmd.Transaction = tx;
                 cmd.CommandText = @"
                     INSERT INTO Replicas (
@@ -429,6 +438,43 @@ public sealed class SqliteCatalogService : ICatalogService
             await tx.RollbackAsync(ct).ConfigureAwait(false);
             throw;
         }
+    }
+
+    /// <inheritdoc />
+    public async Task SaveReplicaAsync(SnapshotReplica replica, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(replica);
+
+        using var conn = await _connectionFactory.CreateOpenConnectionAsync(ct).ConfigureAwait(false);
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"
+            INSERT INTO Replicas (
+                ReplicaId, BackupSetId, RepositoryId, RepositoryType,
+                EngineSnapshotId, Role, VerificationState, LastVerifiedUtc, VerificationDetails
+            ) VALUES (
+                @repId, @setId, @repoId, @repoType,
+                @engineId, @role, @state, @lastVerified, @details
+            ) ON CONFLICT(ReplicaId) DO UPDATE SET
+                BackupSetId = excluded.BackupSetId,
+                RepositoryId = excluded.RepositoryId,
+                RepositoryType = excluded.RepositoryType,
+                EngineSnapshotId = excluded.EngineSnapshotId,
+                Role = excluded.Role,
+                VerificationState = excluded.VerificationState,
+                LastVerifiedUtc = excluded.LastVerifiedUtc,
+                VerificationDetails = excluded.VerificationDetails;
+        ";
+        cmd.Parameters.AddWithValue("@repId", replica.Id.ToString("D"));
+        cmd.Parameters.AddWithValue("@setId", replica.BackupSetId.ToString());
+        cmd.Parameters.AddWithValue("@repoId", replica.RepositoryId);
+        cmd.Parameters.AddWithValue("@repoType", replica.RepositoryType.ToString());
+        cmd.Parameters.AddWithValue("@engineId", replica.EngineSnapshotId);
+        cmd.Parameters.AddWithValue("@role", replica.Role.ToString());
+        cmd.Parameters.AddWithValue("@state", replica.VerificationState.ToString());
+        cmd.Parameters.AddWithValue("@lastVerified", replica.LastVerifiedUtc.HasValue ? replica.LastVerifiedUtc.Value.ToString("O") : (object)DBNull.Value);
+        cmd.Parameters.AddWithValue("@details", (object?)replica.VerificationDetails ?? DBNull.Value);
+
+        await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
@@ -600,12 +646,14 @@ public sealed class SqliteCatalogService : ICatalogService
             repoId = "repository";
         }
 
+        // Helper record for parsed snapshot metadata
+        var parsedSnapshots = new List<(ResticSnapshot Snapshot, BackupSetId SetId, string PlanName, SnapshotRole Role)>();
+
         foreach (var snap in snapshots)
         {
-            // Parse BackupSetId and metadata from tags
             BackupSetId setId = default;
             string? planName = null;
-            var role = SnapshotRole.Payload;
+            SnapshotRole? role = null;
 
             if (snap.Tags != null)
             {
@@ -634,62 +682,156 @@ public sealed class SqliteCatalogService : ICatalogService
                 }
             }
 
-            // If no backupset tag found, generate deterministic BackupSetId from snapshot short id
+            // If no backupset tag found, treat as standalone with deterministic ID
             if (setId.Value == Guid.Empty)
             {
                 byte[] hashBytes = System.Security.Cryptography.MD5.HashData(System.Text.Encoding.UTF8.GetBytes(snap.Id));
                 setId = new BackupSetId(new Guid(hashBytes));
+                role ??= SnapshotRole.Standalone;
+            }
+            else
+            {
+                role ??= SnapshotRole.Payload;
             }
 
-            discoveredSetIds.Add(setId.ToString());
             planName ??= "Reconstructed Plan";
+            parsedSnapshots.Add((snap, setId, planName, role.Value));
+        }
+
+        // Group snapshots by BackupSetId to enforce Dual-Snapshot Commit Protocol (ADR-004)
+        var groupedBySet = parsedSnapshots.GroupBy(p => p.SetId);
+
+        foreach (var group in groupedBySet)
+        {
+            var setId = group.Key;
+            discoveredSetIds.Add(setId.ToString());
+
+            var payloadEntry = group.FirstOrDefault(g => g.Role == SnapshotRole.Payload || g.Role == SnapshotRole.Standalone);
+            var receiptEntry = group.FirstOrDefault(g => g.Role == SnapshotRole.ReceiptControl);
+
+            // Determine commit status based on dual-snapshot commit rule
+            BackupJobStatus status;
+            string? failureReason = null;
+            var replicasToSave = new List<SnapshotReplica>();
+
+            if (payloadEntry.Snapshot != null && receiptEntry.Snapshot != null)
+            {
+                // Both payload and receipt exist: verified complete
+                status = BackupJobStatus.Complete;
+                replicasToSave.Add(new SnapshotReplica(
+                    id: Guid.NewGuid(),
+                    backupSetId: setId,
+                    repositoryId: repoId,
+                    repositoryType: RepositoryLocationType.Local,
+                    engineSnapshotId: payloadEntry.Snapshot.Id,
+                    role: SnapshotRole.Payload,
+                    verificationState: SnapshotVerificationState.QuickVerified,
+                    lastVerifiedUtc: DateTimeOffset.UtcNow,
+                    verificationDetails: "Dual-snapshot payload verified with matching control receipt."));
+
+                replicasToSave.Add(new SnapshotReplica(
+                    id: Guid.NewGuid(),
+                    backupSetId: setId,
+                    repositoryId: repoId,
+                    repositoryType: RepositoryLocationType.Local,
+                    engineSnapshotId: receiptEntry.Snapshot.Id,
+                    role: SnapshotRole.ReceiptControl,
+                    verificationState: SnapshotVerificationState.QuickVerified,
+                    lastVerifiedUtc: DateTimeOffset.UtcNow,
+                    verificationDetails: "Dual-snapshot control receipt verified."));
+            }
+            else if (payloadEntry.Snapshot != null && payloadEntry.Role == SnapshotRole.Standalone)
+            {
+                // Standalone snapshot without dual-snapshot tags (legacy or external)
+                status = BackupJobStatus.Complete;
+                replicasToSave.Add(new SnapshotReplica(
+                    id: Guid.NewGuid(),
+                    backupSetId: setId,
+                    repositoryId: repoId,
+                    repositoryType: RepositoryLocationType.Local,
+                    engineSnapshotId: payloadEntry.Snapshot.Id,
+                    role: SnapshotRole.Standalone,
+                    verificationState: SnapshotVerificationState.Unverified,
+                    lastVerifiedUtc: DateTimeOffset.UtcNow,
+                    verificationDetails: "Standalone engine snapshot."));
+            }
+            else if (payloadEntry.Snapshot != null && receiptEntry.Snapshot == null)
+            {
+                // ADR-004: Unconfirmed payload snapshot without control receipt
+                status = BackupJobStatus.Incomplete;
+                failureReason = "Completion not confirmed: Control receipt snapshot missing from repository.";
+                warnings.Add($"BackupSet {setId} is unfinalized (missing control receipt snapshot).");
+
+                replicasToSave.Add(new SnapshotReplica(
+                    id: Guid.NewGuid(),
+                    backupSetId: setId,
+                    repositoryId: repoId,
+                    repositoryType: RepositoryLocationType.Local,
+                    engineSnapshotId: payloadEntry.Snapshot.Id,
+                    role: SnapshotRole.Payload,
+                    verificationState: SnapshotVerificationState.Unverified,
+                    lastVerifiedUtc: DateTimeOffset.UtcNow,
+                    verificationDetails: "Unconfirmed payload: Missing dual-snapshot control receipt."));
+            }
+            else
+            {
+                // Orphaned receipt snapshot without payload
+                status = BackupJobStatus.Incomplete;
+                failureReason = "Orphaned control receipt: Payload snapshot missing from repository.";
+                warnings.Add($"BackupSet {setId} has control receipt but lacks payload snapshot.");
+
+                replicasToSave.Add(new SnapshotReplica(
+                    id: Guid.NewGuid(),
+                    backupSetId: setId,
+                    repositoryId: repoId,
+                    repositoryType: RepositoryLocationType.Local,
+                    engineSnapshotId: receiptEntry.Snapshot!.Id,
+                    role: SnapshotRole.ReceiptControl,
+                    verificationState: SnapshotVerificationState.Unverified,
+                    lastVerifiedUtc: DateTimeOffset.UtcNow,
+                    verificationDetails: "Orphaned control receipt: Missing payload snapshot."));
+            }
+
+            var primarySnap = payloadEntry.Snapshot ?? receiptEntry.Snapshot!;
+            string planName = payloadEntry.PlanName ?? receiptEntry.PlanName ?? "Reconstructed Plan";
 
             var descriptor = new BackupSetDescriptor(
                 SchemaVersion: "1.0.0",
                 PlanName: planName,
                 PlanRevision: 1,
                 TargetCategories: ["DisasterRecovery"],
-                IncludedComponentIds: snap.Paths.ToList(),
-                SourceMappings: snap.Paths.ToDictionary(p => p, p => p),
+                IncludedComponentIds: primarySnap.Paths.ToList(),
+                SourceMappings: primarySnap.Paths.ToDictionary(p => p, p => p),
                 ResticVersion: "restic",
-                GeneratedAtUtc: snap.Time);
+                GeneratedAtUtc: primarySnap.Time);
 
             var summary = new BackupOutcomeSummary(
-                TotalFiles: snap.Paths.Length,
-                ProcessedFiles: snap.Paths.Length,
+                TotalFiles: primarySnap.Paths.Length,
+                ProcessedFiles: primarySnap.Paths.Length,
                 TotalBytes: 0,
                 TransferredBytes: 0,
-                OmissionsCount: 0,
-                WarningsCount: 0);
+                OmissionsCount: status == BackupJobStatus.Incomplete ? 1 : 0,
+                WarningsCount: status == BackupJobStatus.Incomplete ? 1 : 0,
+                FailureReason: failureReason);
 
             var backupSet = new BackupSet(
                 id: setId,
                 planId: Guid.NewGuid(),
                 planRevision: 1,
                 deviceProfile: new DeviceProfileInfo(
-                    DeviceId: snap.Hostname,
-                    MachineName: snap.Hostname,
+                    DeviceId: primarySnap.Hostname,
+                    MachineName: primarySnap.Hostname,
                     OsPlatform: "Unknown",
-                    UserName: snap.Username),
-                captureStartUtc: snap.Time,
-                captureEndUtc: snap.Time,
-                status: BackupJobStatus.Complete,
+                    UserName: primarySnap.Username),
+                captureStartUtc: primarySnap.Time,
+                captureEndUtc: primarySnap.Time,
+                status: status,
                 outcomeSummary: summary,
                 descriptor: descriptor);
 
-            var replica = new SnapshotReplica(
-                id: Guid.NewGuid(),
-                backupSetId: setId,
-                repositoryId: repoId,
-                repositoryType: RepositoryLocationType.Local,
-                engineSnapshotId: snap.Id,
-                role: role,
-                verificationState: SnapshotVerificationState.Unverified,
-                lastVerifiedUtc: DateTimeOffset.UtcNow);
-
-            await SaveBackupSetAsync(backupSet, replica, ct).ConfigureAwait(false);
+            await SaveBackupSetAsync(backupSet, replicasToSave, ct).ConfigureAwait(false);
             snapshotsReconstructed++;
-            replicasReconstructed++;
+            replicasReconstructed += replicasToSave.Count;
         }
 
         return new CatalogRebuildResult(
@@ -698,4 +840,52 @@ public sealed class SqliteCatalogService : ICatalogService
             DiscoveredBackupSetIds: discoveredSetIds.ToList(),
             Warnings: warnings);
     }
+
+    /// <inheritdoc />
+    public async Task PurgeRemovedReplicasAsync(IEnumerable<string> removedEngineSnapshotIds, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(removedEngineSnapshotIds);
+
+        var idList = removedEngineSnapshotIds
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (idList.Count == 0) return;
+
+        using var conn = await _connectionFactory.CreateOpenConnectionAsync(ct).ConfigureAwait(false);
+        using var tx = conn.BeginTransaction();
+        try
+        {
+            // 1. Delete matching replicas (supports both full and short snapshot IDs)
+            foreach (var engineId in idList)
+            {
+                using var cmd = conn.CreateCommand();
+                cmd.Transaction = tx;
+                cmd.CommandText = "DELETE FROM Replicas WHERE EngineSnapshotId = @engineId OR EngineSnapshotId LIKE @prefix;";
+                cmd.Parameters.AddWithValue("@engineId", engineId);
+                cmd.Parameters.AddWithValue("@prefix", engineId + "%");
+                await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+            }
+
+            // 2. Clean up snapshots that have zero remaining physical replicas
+            using (var cleanCmd = conn.CreateCommand())
+            {
+                cleanCmd.Transaction = tx;
+                cleanCmd.CommandText = @"
+                    DELETE FROM Snapshots
+                    WHERE BackupSetId NOT IN (SELECT DISTINCT BackupSetId FROM Replicas);
+                ";
+                await cleanCmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+            }
+
+            await tx.CommitAsync(ct).ConfigureAwait(false);
+        }
+        catch
+        {
+            await tx.RollbackAsync(ct).ConfigureAwait(false);
+            throw;
+        }
+    }
 }
+

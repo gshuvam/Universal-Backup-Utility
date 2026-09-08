@@ -3,12 +3,14 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:vm="using:UniversalBackup.Desktop.ViewModels"
-             mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="650"
+             xmlns:dtos="using:UniversalBackup.Application.DTOs"
+             xmlns:models="using:UniversalBackup.Domain.Models"
+             mc:Ignorable="d" d:DesignWidth="1100" d:DesignHeight="950"
              x:Class="UniversalBackup.Desktop.Views.RestoreView"
              x:DataType="vm:RestoreViewModel">
 
     <ScrollViewer VerticalScrollBarVisibility="Auto">
-        <StackPanel Spacing="24" Margin="32">
+        <StackPanel Spacing="20" Margin="32">
             <!-- Header Card -->
             <Border Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
                     BorderBrush="{DynamicResource SystemControlTransientBorderBrush}"
@@ -27,71 +29,656 @@
                                    FontSize="20"
                                    FontWeight="Bold"
                                    Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}" />
-                        <TextBlock Text="Select a historical snapshot from the repository timeline to inspect and restore files."
+                        <TextBlock Text="Selectively choose files, folders, or game components, configure path remapping, enforce component priority, and preview conflict safety."
                                    FontSize="13"
                                    Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
                     </StackPanel>
 
-                    <Button Grid.Column="2"
-                            Command="{Binding RefreshSnapshotsCommand}"
-                            Classes="accent"
-                            Padding="16,8"
-                            CornerRadius="6"
-                            VerticalAlignment="Center">
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <PathIcon Data="{StaticResource NavIconRestore}" Width="14" Height="14" />
-                            <TextBlock Text="Refresh Timeline" FontWeight="SemiBold" />
-                        </StackPanel>
-                    </Button>
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                        <Button Command="{Binding RefreshSnapshotsCommand}"
+                                Classes="accent"
+                                Padding="16,8"
+                                CornerRadius="6"
+                                IsEnabled="{Binding !IsLoadingTimeline}">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <TextBlock Text="↻ Refresh Timeline" FontWeight="SemiBold" FontSize="12" />
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
                 </Grid>
             </Border>
 
-            <!-- Snapshot Information & Settings -->
-            <Grid ColumnDefinitions="*,*">
+            <!-- Active Application Conflict Warning Banner -->
+            <Border IsVisible="{Binding HasDetectedConflicts}"
+                    Background="#33FF8C00"
+                    BorderBrush="#FF8C00"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    Padding="16">
+                <StackPanel Spacing="8">
+                    <Grid ColumnDefinitions="Auto,*">
+                        <TextBlock Grid.Column="0" Text="⚠️" FontSize="16" Margin="0,0,8,0" VerticalAlignment="Center" />
+                        <TextBlock Grid.Column="1"
+                                   Text="Active Application Conflicts Detected — Process File-Locking Warning"
+                                   FontWeight="Bold"
+                                   FontSize="13"
+                                   Foreground="#FF8C00"
+                                   VerticalAlignment="Center" />
+                    </Grid>
+                    <TextBlock Text="The following active applications or platform launchers were detected. Please close them before restoring to avoid file-locking collisions:"
+                               FontSize="12" />
+                    <ItemsControl ItemsSource="{Binding DetectedConflicts}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="models:RunningApplicationConflict">
+                                <Border Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
+                                        CornerRadius="4"
+                                        Padding="10,6"
+                                        Margin="0,2,0,2">
+                                    <Grid ColumnDefinitions="Auto,*,Auto">
+                                        <TextBlock Grid.Column="0" Text="{Binding ProcessName}" FontWeight="Bold" FontSize="12" Margin="0,0,8,0" />
+                                        <TextBlock Grid.Column="1" Text="{Binding Description}" FontSize="12" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                                        <TextBlock Grid.Column="2" Text="{Binding ProcessId, StringFormat='PID: {0}'}" FontSize="11" FontFamily="Consolas, Monospace" Margin="8,0,0,0" />
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Border>
+
+            <!-- Search and Filter Bar -->
+            <Grid ColumnDefinitions="*,16,180,16,Auto">
+                <TextBox Grid.Column="0"
+                         Text="{Binding SearchQuery}"
+                         Watermark="Search snapshots by plan name, device, date, or snapshot ID..."
+                         Padding="12,8"
+                         CornerRadius="6" />
+
+                <ComboBox Grid.Column="2"
+                          ItemsSource="{Binding StatusFilters}"
+                          SelectedItem="{Binding SelectedStatusFilter}"
+                          HorizontalAlignment="Stretch"
+                          CornerRadius="6" />
+
+                <Button Grid.Column="4"
+                        Command="{Binding ClearFiltersCommand}"
+                        Padding="14,8"
+                        CornerRadius="6">
+                    <TextBlock Text="Clear Filters" FontSize="12" />
+                </Button>
+            </Grid>
+
+            <!-- Master-Detail Timeline Layout (2 Columns) -->
+            <Grid ColumnDefinitions="400,20,*" MinHeight="480">
+                <!-- Left: Historical Snapshots Timeline List -->
                 <Border Grid.Column="0"
-                        Margin="0,0,12,0"
                         Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
                         BorderBrush="{DynamicResource SystemControlTransientBorderBrush}"
                         BorderThickness="1"
-                        CornerRadius="8"
-                        Padding="20">
-                    <StackPanel Spacing="12">
-                        <TextBlock Text="Restore Destination Mode"
-                                   FontSize="14"
-                                   FontWeight="SemiBold" />
-                        <TextBlock Text="Controls where restored files and folders will be written."
-                                   FontSize="12"
-                                   Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
-                        <Border Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"
-                                CornerRadius="6"
-                                Padding="12,8">
-                            <TextBlock Text="{Binding SelectedDestinationMode}" FontWeight="Medium" />
-                        </Border>
-                    </StackPanel>
+                        CornerRadius="10"
+                        Padding="14">
+                    <Grid RowDefinitions="Auto,*">
+                        <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="4,0,4,12">
+                            <TextBlock Text="Historical Snapshots"
+                                       FontSize="14"
+                                       FontWeight="Bold"
+                                       Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}" />
+                            <TextBlock Grid.Column="1"
+                                       Text="{Binding AvailableSnapshotsCount, StringFormat='{}{0} snapshot(s)'}"
+                                       FontSize="12"
+                                       Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                        </Grid>
+
+                        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" MaxHeight="540">
+                            <ItemsControl ItemsSource="{Binding FilteredSnapshots}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="dtos:HistoricalSnapshotItem">
+                                        <Button Command="{Binding $parent[UserControl].((vm:RestoreViewModel)DataContext).SelectSnapshotCommand}"
+                                                CommandParameter="{Binding .}"
+                                                Classes="category-card"
+                                                Padding="12,10"
+                                                Margin="0,0,0,8">
+                                            <Grid ColumnDefinitions="Auto,*,Auto">
+                                                <!-- Status Color Stripe -->
+                                                <Border Grid.Column="0"
+                                                        Background="{Binding StatusColor}"
+                                                        CornerRadius="3"
+                                                        Width="4"
+                                                        Margin="0,0,12,0" />
+
+                                                <!-- Snapshot Info -->
+                                                <StackPanel Grid.Column="1" Spacing="4">
+                                                    <Grid ColumnDefinitions="*,Auto">
+                                                        <TextBlock Grid.Column="0"
+                                                                   Text="{Binding PlanName}"
+                                                                   FontWeight="SemiBold"
+                                                                   FontSize="13"
+                                                                   TextTrimming="CharacterEllipsis" />
+                                                        <TextBlock Grid.Column="1"
+                                                                   Text="{Binding RelativeTime}"
+                                                                   FontSize="11"
+                                                                   Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                                                    </Grid>
+
+                                                    <TextBlock Text="{Binding FormattedDate}"
+                                                               FontSize="11"
+                                                               Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+
+                                                    <!-- Machine & metrics -->
+                                                    <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,2,0,0">
+                                                        <TextBlock Text="{Binding DeviceProfile.MachineName}"
+                                                                   FontSize="11"
+                                                                   Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                                                        <TextBlock Text="•" FontSize="11" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                                                        <TextBlock Text="{Binding OutcomeSummary.TotalFiles, StringFormat='{}{0:N0} files'}"
+                                                                   FontSize="11"
+                                                                   Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                                                        <TextBlock Text="•" FontSize="11" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                                                        <TextBlock Text="{Binding FormattedTotalSize}"
+                                                                   FontSize="11"
+                                                                   FontWeight="SemiBold" />
+                                                    </StackPanel>
+                                                </StackPanel>
+
+                                                <!-- Status Badge & Replica Badges -->
+                                                <StackPanel Grid.Column="2" Spacing="4" VerticalAlignment="Center" Margin="10,0,0,0">
+                                                    <Border Background="{Binding StatusColor}"
+                                                            CornerRadius="4"
+                                                            Padding="8,3"
+                                                            HorizontalAlignment="Right">
+                                                        <TextBlock Text="{Binding StatusBadge}"
+                                                                   Foreground="White"
+                                                                   FontSize="10"
+                                                                   FontWeight="Bold" />
+                                                    </Border>
+                                                    <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Right">
+                                                        <Border IsVisible="{Binding HasLocalReplica}"
+                                                                Background="#0078D4"
+                                                                CornerRadius="3"
+                                                                Padding="4,2">
+                                                            <TextBlock Text="Local" Foreground="White" FontSize="9" FontWeight="SemiBold" />
+                                                        </Border>
+                                                        <Border IsVisible="{Binding HasCloudReplica}"
+                                                                Background="#8764B8"
+                                                                CornerRadius="3"
+                                                                Padding="4,2">
+                                                            <TextBlock Text="Cloud" Foreground="White" FontSize="9" FontWeight="SemiBold" />
+                                                        </Border>
+                                                    </StackPanel>
+                                                </StackPanel>
+                                            </Grid>
+                                        </Button>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </Grid>
                 </Border>
 
-                <Border Grid.Column="1"
-                        Margin="12,0,0,0"
-                        Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
-                        BorderBrush="{DynamicResource SystemControlTransientBorderBrush}"
-                        BorderThickness="1"
-                        CornerRadius="8"
-                        Padding="20">
-                    <StackPanel Spacing="12">
-                        <TextBlock Text="Collision &amp; Conflict Policy"
-                                   FontSize="14"
-                                   FontWeight="SemiBold" />
-                        <TextBlock Text="Preimage rollback journal records overwritten files for undo."
-                                   FontSize="12"
-                                   Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
-                        <Border Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"
-                                CornerRadius="6"
-                                Padding="12,8">
-                            <TextBlock Text="{Binding ConflictPolicy}" FontWeight="Medium" />
+                <!-- Right: Snapshot Detail & Content Explorer -->
+                <Grid Grid.Column="2" RowDefinitions="Auto,*">
+                    <!-- Empty State (No snapshot selected) -->
+                    <Border Grid.Row="0"
+                            IsVisible="{Binding !HasSelectedSnapshot}"
+                            Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
+                            BorderBrush="{DynamicResource SystemControlTransientBorderBrush}"
+                            BorderThickness="1"
+                            CornerRadius="10"
+                            Padding="32"
+                            MinHeight="400">
+                        <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="12">
+                            <PathIcon Data="{StaticResource NavIconRestore}"
+                                      Width="48" Height="48"
+                                      Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+                                      HorizontalAlignment="Center" />
+                            <TextBlock Text="No Snapshot Selected"
+                                       FontSize="16"
+                                       FontWeight="Bold"
+                                       HorizontalAlignment="Center" />
+                            <TextBlock Text="Select a historical snapshot from the timeline on the left to inspect its contents and configure selective restore."
+                                       FontSize="12"
+                                       Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+                                       TextAlignment="Center"
+                                       MaxWidth="380"
+                                       TextWrapping="Wrap" />
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Active Snapshot Inspection (Visible when snapshot selected) -->
+                    <StackPanel Grid.Row="0" IsVisible="{Binding HasSelectedSnapshot}" Spacing="16">
+                        <!-- Snapshot Metadata Inspector Card -->
+                        <Border Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
+                                BorderBrush="{DynamicResource SystemControlTransientBorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="10"
+                                Padding="16">
+                            <StackPanel Spacing="10">
+                                <Grid ColumnDefinitions="*,Auto">
+                                    <StackPanel Grid.Column="0" Spacing="2">
+                                        <TextBlock Text="{Binding SelectedSnapshot.PlanName, FallbackValue='Backup Plan'}"
+                                                   FontSize="16"
+                                                   FontWeight="Bold" />
+                                        <TextBlock Text="{Binding SelectedSnapshot.FormattedDate, FallbackValue=''}"
+                                                   FontSize="12"
+                                                   Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                                    </StackPanel>
+
+                                    <Border Grid.Column="1"
+                                            Background="{Binding SelectedSnapshot.StatusColor, FallbackValue='#107C41'}"
+                                            CornerRadius="4"
+                                            Padding="10,4"
+                                            VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding SelectedSnapshot.StatusBadge, FallbackValue='Verified'}"
+                                                   Foreground="White"
+                                                   FontSize="11"
+                                                   FontWeight="Bold" />
+                                    </Border>
+                                </Grid>
+
+                                <!-- Details grid -->
+                                <Grid ColumnDefinitions="*,*,*,*" Margin="0,2,0,0">
+                                    <StackPanel Grid.Column="0" Spacing="2">
+                                        <TextBlock Text="MACHINE" FontSize="10" FontWeight="SemiBold" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                                        <TextBlock Text="{Binding SelectedSnapshot.DeviceProfile.MachineName, FallbackValue='N/A'}" FontSize="12" FontWeight="Medium" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="1" Spacing="2">
+                                        <TextBlock Text="TOTAL SIZE" FontSize="10" FontWeight="SemiBold" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                                        <TextBlock Text="{Binding SelectedSnapshot.FormattedTotalSize, FallbackValue='0 B'}" FontSize="12" FontWeight="Medium" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="2" Spacing="2">
+                                        <TextBlock Text="TOTAL FILES" FontSize="10" FontWeight="SemiBold" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                                        <TextBlock Text="{Binding SelectedSnapshot.OutcomeSummary.TotalFiles, StringFormat='{}{0:N0}', FallbackValue='0'}" FontSize="12" FontWeight="Medium" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="3" Spacing="2">
+                                        <TextBlock Text="CATEGORIES" FontSize="10" FontWeight="SemiBold" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                                        <TextBlock Text="{Binding SelectedSnapshot.CategoriesSummary, FallbackValue='General'}" FontSize="12" FontWeight="Medium" TextTrimming="CharacterEllipsis" />
+                                    </StackPanel>
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Content Hierarchy & Selective Restore Tree Section -->
+                        <Border Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
+                                BorderBrush="{DynamicResource SystemControlTransientBorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="10"
+                                Padding="16">
+                            <StackPanel Spacing="12">
+                                <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto">
+                                    <TextBlock Grid.Column="0"
+                                               Text="Selective Restore Contents (Check items to restore)"
+                                               FontSize="14"
+                                               FontWeight="Bold"
+                                               VerticalAlignment="Center" />
+
+                                    <Button Grid.Column="1"
+                                            Command="{Binding SelectAllNodesCommand}"
+                                            Padding="8,4"
+                                            CornerRadius="4"
+                                            Margin="0,0,6,0">
+                                        <TextBlock Text="Select All" FontSize="11" />
+                                    </Button>
+
+                                    <Button Grid.Column="2"
+                                            Command="{Binding DeselectAllNodesCommand}"
+                                            Padding="8,4"
+                                            CornerRadius="4"
+                                            Margin="0,0,6,0">
+                                        <TextBlock Text="Deselect All" FontSize="11" />
+                                    </Button>
+
+                                    <Button Grid.Column="3"
+                                            Command="{Binding ExpandAllNodesCommand}"
+                                            Padding="8,4"
+                                            CornerRadius="4"
+                                            Margin="0,0,6,0">
+                                        <TextBlock Text="Expand All" FontSize="11" />
+                                    </Button>
+
+                                    <Button Grid.Column="4"
+                                            Command="{Binding CollapseAllNodesCommand}"
+                                            Padding="8,4"
+                                            CornerRadius="4">
+                                        <TextBlock Text="Collapse All" FontSize="11" />
+                                    </Button>
+                                </Grid>
+
+                                <!-- TreeView with CheckBoxes for Selective Picking -->
+                                <Border Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"
+                                        CornerRadius="6"
+                                        Padding="8"
+                                        MinHeight="250"
+                                        MaxHeight="320">
+                                    <TreeView ItemsSource="{Binding ContentTreeNodes}">
+                                        <TreeView.ItemTemplate>
+                                            <TreeDataTemplate ItemsSource="{Binding Children}" x:DataType="dtos:SnapshotTreeNode">
+                                                <Grid ColumnDefinitions="Auto,Auto,*,Auto" Margin="0,2">
+                                                    <!-- Tri-State CheckBox -->
+                                                    <CheckBox Grid.Column="0"
+                                                              IsChecked="{Binding IsChecked, Mode=TwoWay}"
+                                                              Margin="0,0,6,0"
+                                                              VerticalAlignment="Center" />
+
+                                                    <TextBlock Grid.Column="1"
+                                                               Text="{Binding IconGlyph}"
+                                                               FontSize="13"
+                                                               Margin="0,0,8,0"
+                                                               VerticalAlignment="Center" />
+
+                                                    <TextBlock Grid.Column="2"
+                                                               Text="{Binding Name}"
+                                                               FontSize="12"
+                                                               FontWeight="Medium"
+                                                               VerticalAlignment="Center" />
+
+                                                    <TextBlock Grid.Column="3"
+                                                               Text="{Binding FormattedSize}"
+                                                               FontSize="11"
+                                                               Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+                                                               Margin="12,0,4,0"
+                                                               VerticalAlignment="Center" />
+                                                </Grid>
+                                            </TreeDataTemplate>
+                                        </TreeView.ItemTemplate>
+                                    </TreeView>
+                                </Border>
+                            </StackPanel>
                         </Border>
                     </StackPanel>
-                </Border>
+                </Grid>
             </Grid>
+
+            <!-- Restore Settings & Path Remapping Engine Section -->
+            <Border Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
+                    BorderBrush="{DynamicResource SystemControlTransientBorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="10"
+                    Padding="20">
+                <StackPanel Spacing="16">
+                    <Grid ColumnDefinitions="*,Auto">
+                        <StackPanel Grid.Column="0" Spacing="4">
+                            <TextBlock Text="Restore Destination &amp; Path Remapping"
+                                       FontSize="15"
+                                       FontWeight="Bold" />
+                            <TextBlock Text="Select original paths, redirect into an alternative custom folder, or remap drives and user profiles."
+                                       FontSize="12"
+                                       Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                            <Button Command="{Binding GenerateRestorePlanCommand}"
+                                    Padding="14,10"
+                                    CornerRadius="6"
+                                    IsEnabled="{Binding !IsGeneratingPlan}">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <TextBlock Text="⚡ Inspect &amp; Prepare Plan" FontWeight="SemiBold" FontSize="12" />
+                                </StackPanel>
+                            </Button>
+                            <Button Command="{Binding ExecuteRestoreCommand}"
+                                    Classes="accent"
+                                    Padding="18,10"
+                                    CornerRadius="6"
+                                    IsEnabled="{Binding !IsRestoring}">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <TextBlock Text="▶️ Execute Selective Restore" FontWeight="SemiBold" FontSize="13" />
+                                </StackPanel>
+                            </Button>
+                        </StackPanel>
+                    </Grid>
+
+                    <Grid ColumnDefinitions="*,16,*">
+                        <!-- Left: Destination Mode Picker -->
+                        <StackPanel Grid.Column="0" Spacing="8">
+                            <TextBlock Text="Path Remapping Mode" FontSize="12" FontWeight="SemiBold" />
+                            <ComboBox ItemsSource="{Binding DestinationModes}"
+                                      SelectedItem="{Binding SelectedDestinationMode}"
+                                      HorizontalAlignment="Stretch"
+                                      CornerRadius="6" />
+
+                            <!-- Dynamic Options per Mode -->
+                            <!-- Mode 1: Alternative Custom Folder -->
+                            <StackPanel IsVisible="{Binding IsCustomFolderMode}" Spacing="6" Margin="0,8,0,0">
+                                <TextBlock Text="Target Destination Folder" FontSize="12" FontWeight="SemiBold" />
+                                <TextBox Text="{Binding CustomDestinationFolder}"
+                                         Watermark="e.g. D:\RestoredGames or C:\BackupRecovery"
+                                         CornerRadius="6" />
+                            </StackPanel>
+
+                            <!-- Mode 2: Drive / Volume Remap -->
+                            <StackPanel IsVisible="{Binding IsDriveRemapMode}" Spacing="6" Margin="0,8,0,0">
+                                <Grid ColumnDefinitions="*,12,*">
+                                    <StackPanel Grid.Column="0" Spacing="4">
+                                        <TextBlock Text="Source Drive" FontSize="11" FontWeight="SemiBold" />
+                                        <TextBox Text="{Binding SourceDrive}" Watermark="e.g. D:\" CornerRadius="6" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="2" Spacing="4">
+                                        <TextBlock Text="Target Drive / Path" FontSize="11" FontWeight="SemiBold" />
+                                        <TextBox Text="{Binding TargetDrive}" Watermark="e.g. E:\Games" CornerRadius="6" />
+                                    </StackPanel>
+                                </Grid>
+                            </StackPanel>
+
+                            <!-- Mode 3: User Profile Remap -->
+                            <StackPanel IsVisible="{Binding IsUserProfileRemapMode}" Spacing="6" Margin="0,8,0,0">
+                                <Grid ColumnDefinitions="*,12,*">
+                                    <StackPanel Grid.Column="0" Spacing="4">
+                                        <TextBlock Text="Original User Profile" FontSize="11" FontWeight="SemiBold" />
+                                        <TextBox Text="{Binding SourceUserProfile}" Watermark="e.g. C:\Users\OldUser" CornerRadius="6" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="2" Spacing="4">
+                                        <TextBlock Text="New Target User Profile" FontSize="11" FontWeight="SemiBold" />
+                                        <TextBox Text="{Binding TargetUserProfile}" Watermark="e.g. C:\Users\NewUser" CornerRadius="6" />
+                                    </StackPanel>
+                                </Grid>
+                            </StackPanel>
+                        </StackPanel>
+
+                        <!-- Right: Conflict Policy Selector -->
+                        <StackPanel Grid.Column="2" Spacing="8">
+                            <TextBlock Text="Collision &amp; Conflict Policy" FontSize="12" FontWeight="SemiBold" />
+                            <ComboBox ItemsSource="{Binding ConflictPolicies}"
+                                      SelectedItem="{Binding ConflictPolicy}"
+                                      HorizontalAlignment="Stretch"
+                                      CornerRadius="6" />
+                            <TextBlock Text="Preimage rollback journal records preimages before overwriting to permit instantaneous undo."
+                                       FontSize="11"
+                                       Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                        </StackPanel>
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <!-- Restore Plan Priority Preview (Visible when plan generated) -->
+            <Border IsVisible="{Binding HasGeneratedPlan}"
+                    Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
+                    BorderBrush="{DynamicResource SystemControlHighlightAccentBrush}"
+                    BorderThickness="1"
+                    CornerRadius="10"
+                    Padding="20">
+                <StackPanel Spacing="16">
+                    <Grid ColumnDefinitions="*,Auto">
+                        <StackPanel Grid.Column="0" Spacing="4">
+                            <TextBlock Text="Prioritized Restore Plan Preview"
+                                       FontSize="16"
+                                       FontWeight="Bold"
+                                       Foreground="{DynamicResource SystemControlHighlightAccentBrush}" />
+                            <TextBlock Text="Enforces strict component priority: Priority 1 (GameFiles) → Priority 2 (LauncherMetadata) → Priority 3 (UserData)."
+                                       FontSize="12"
+                                       Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                        </StackPanel>
+
+                        <!-- Metric Badges -->
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                            <Border Background="#0078D4" CornerRadius="4" Padding="8,4">
+                                <TextBlock Text="{Binding GeneratedPlan.GameFilesCount, StringFormat='P1 GameFiles: {0}'}"
+                                           Foreground="White" FontSize="11" FontWeight="SemiBold" />
+                            </Border>
+                            <Border Background="#8764B8" CornerRadius="4" Padding="8,4">
+                                <TextBlock Text="{Binding GeneratedPlan.LauncherMetadataCount, StringFormat='P2 LauncherMetadata: {0}'}"
+                                           Foreground="White" FontSize="11" FontWeight="SemiBold" />
+                            </Border>
+                            <Border Background="#107C41" CornerRadius="4" Padding="8,4">
+                                <TextBlock Text="{Binding GeneratedPlan.UserDataCount, StringFormat='P3 UserData: {0}'}"
+                                           Foreground="White" FontSize="11" FontWeight="SemiBold" />
+                            </Border>
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- Planned Items Table -->
+                    <Border Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"
+                            CornerRadius="6"
+                            Padding="8"
+                            MaxHeight="260">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <ItemsControl ItemsSource="{Binding PlannedItems}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="dtos:RestorePlanItem">
+                                        <Border Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
+                                                CornerRadius="4"
+                                                Padding="10,6"
+                                                Margin="0,0,0,4">
+                                            <Grid ColumnDefinitions="Auto,*,Auto,Auto">
+                                                <!-- Priority Badge -->
+                                                <Border Grid.Column="0"
+                                                        Background="{Binding PriorityColor}"
+                                                        CornerRadius="3"
+                                                        Padding="6,2"
+                                                        Margin="0,0,10,0"
+                                                        VerticalAlignment="Center">
+                                                    <TextBlock Text="{Binding PriorityBadge}"
+                                                               Foreground="White"
+                                                               FontSize="10"
+                                                               FontWeight="Bold" />
+                                                </Border>
+
+                                                <!-- Path Mapping: Source -> Destination -->
+                                                <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                                                    <TextBlock Text="{Binding EffectiveDestinationPath}"
+                                                               FontSize="12"
+                                                               FontWeight="SemiBold"
+                                                               TextTrimming="CharacterEllipsis" />
+                                                    <TextBlock Text="{Binding SourceSnapshotPath, StringFormat='Source: {0}'}"
+                                                               FontSize="11"
+                                                               Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+                                                               TextTrimming="CharacterEllipsis" />
+                                                </StackPanel>
+
+                                                <!-- Component ID -->
+                                                <TextBlock Grid.Column="2"
+                                                           Text="{Binding AssociatedComponentId}"
+                                                           FontSize="11"
+                                                           Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+                                                           Margin="12,0,12,0"
+                                                           VerticalAlignment="Center" />
+
+                                                <!-- Size -->
+                                                <TextBlock Grid.Column="3"
+                                                           Text="{Binding FormattedSize}"
+                                                           FontSize="11"
+                                                           FontWeight="SemiBold"
+                                                           VerticalAlignment="Center" />
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </Border>
+                </StackPanel>
+            </Border>
+
+            <!-- Active Restore Progress Banner -->
+            <Border IsVisible="{Binding IsRestoring}"
+                    Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
+                    BorderBrush="{DynamicResource SystemControlHighlightAccentBrush}"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    Padding="16">
+                <StackPanel Spacing="8">
+                    <Grid ColumnDefinitions="*,Auto">
+                        <TextBlock Text="Restoring Files with Preimage Protection..." FontWeight="Bold" FontSize="13" />
+                        <TextBlock Grid.Column="1" Text="In Progress" FontSize="12" Foreground="{DynamicResource SystemControlHighlightAccentBrush}" />
+                    </Grid>
+                    <ProgressBar IsIndeterminate="True" Height="6" CornerRadius="3" />
+                    <TextBlock Text="{Binding StatusMessage}" FontSize="12" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                </StackPanel>
+            </Border>
+
+            <!-- Restore Outcome & Post-Restore Guidance Checklist -->
+            <Border IsVisible="{Binding HasExecutionResult}"
+                    Background="#1A107C41"
+                    BorderBrush="#107C41"
+                    BorderThickness="1"
+                    CornerRadius="10"
+                    Padding="20">
+                <StackPanel Spacing="16">
+                    <Grid ColumnDefinitions="Auto,*,Auto">
+                        <TextBlock Grid.Column="0" Text="✅" FontSize="20" Margin="0,0,12,0" VerticalAlignment="Center" />
+
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                            <TextBlock Text="Restore Completed Successfully"
+                                       FontSize="16"
+                                       FontWeight="Bold"
+                                       Foreground="#107C41" />
+                            <TextBlock Text="{Binding ExecutionResult.TotalRestoredFiles, StringFormat='{}{0} file(s) restored and deployed with preimage rollback journal.'}"
+                                       FontSize="12"
+                                       Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                        </StackPanel>
+
+                        <!-- Emergency Undo / Rollback Button -->
+                        <Button Grid.Column="2"
+                                Command="{Binding RollbackRestoreCommand}"
+                                IsEnabled="{Binding CanRollback}"
+                                Background="#D13438"
+                                Foreground="White"
+                                Padding="16,8"
+                                CornerRadius="6"
+                                VerticalAlignment="Center">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <TextBlock Text="↩️" FontSize="12" />
+                                <TextBlock Text="Undo / Rollback Restore" FontWeight="Bold" FontSize="12" />
+                            </StackPanel>
+                        </Button>
+                    </Grid>
+
+                    <!-- Metrics Badges -->
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Border Background="{DynamicResource SystemControlBackgroundAltHighBrush}" CornerRadius="4" Padding="8,4">
+                            <TextBlock Text="{Binding ExecutionResult.TotalRestoredFiles, StringFormat='Restored: {0}'}" FontSize="11" FontWeight="SemiBold" />
+                        </Border>
+                        <Border Background="{DynamicResource SystemControlBackgroundAltHighBrush}" CornerRadius="4" Padding="8,4">
+                            <TextBlock Text="{Binding ExecutionResult.OverwrittenFiles, StringFormat='Overwritten (Preimages Saved): {0}'}" FontSize="11" FontWeight="SemiBold" Foreground="#0078D4" />
+                        </Border>
+                        <Border Background="{DynamicResource SystemControlBackgroundAltHighBrush}" CornerRadius="4" Padding="8,4">
+                            <TextBlock Text="{Binding ExecutionResult.RenamedFiles, StringFormat='Auto-Renamed: {0}'}" FontSize="11" FontWeight="SemiBold" Foreground="#8764B8" />
+                        </Border>
+                        <Border Background="{DynamicResource SystemControlBackgroundAltHighBrush}" CornerRadius="4" Padding="8,4">
+                            <TextBlock Text="{Binding ExecutionResult.SkippedFiles, StringFormat='Skipped: {0}'}" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                        </Border>
+                    </StackPanel>
+
+                    <!-- Actionable Post-Restore Guidance Checklist -->
+                    <Border Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
+                            CornerRadius="8"
+                            Padding="14">
+                        <StackPanel Spacing="10">
+                            <TextBlock Text="Actionable Next Steps &amp; Recommendations"
+                                       FontSize="13"
+                                       FontWeight="Bold" />
+                            <ItemsControl ItemsSource="{Binding PostRestoreGuidance}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="x:String">
+                                        <Grid ColumnDefinitions="Auto,*" Margin="0,3">
+                                            <TextBlock Grid.Column="0" Text="• " FontSize="14" FontWeight="Bold" Foreground="{DynamicResource SystemControlHighlightAccentBrush}" />
+                                            <TextBlock Grid.Column="1" Text="{Binding .}" FontSize="12" TextWrapping="Wrap" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </Border>
 
             <!-- Status message -->
             <TextBlock Text="{Binding StatusMessage}"
@@ -100,4 +687,3 @@
         </StackPanel>
     </ScrollViewer>
 </UserControl>
-

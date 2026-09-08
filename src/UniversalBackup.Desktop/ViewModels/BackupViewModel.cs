@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -14,6 +15,8 @@ using CommunityToolkit.Mvvm.Input;
 using UniversalBackup.Application.Common.Interfaces;
 using UniversalBackup.Application.DTOs;
 using UniversalBackup.Desktop.Models;
+using UniversalBackup.Desktop.Services;
+using UniversalBackup.Domain.Enums;
 using UniversalBackup.Domain.Models;
 using UniversalBackup.Domain.Services;
 
@@ -21,13 +24,19 @@ namespace UniversalBackup.Desktop.ViewModels;
 
 /// <summary>
 /// View model managing the backup configuration, progressive discovery scan,
-/// category dashboard cards, virtualized selection tree, and contextual details pane.
+/// category dashboard cards, virtualized selection tree, contextual details pane,
+/// and real-time active backup execution with clean cancellation.
 /// </summary>
 public partial class BackupViewModel : ViewModelBase
 {
     private readonly IDiscoveryScanner? _discoveryScanner;
     private readonly ICatalogService? _catalogService;
+    private readonly IDualSnapshotCommitCoordinator? _commitCoordinator;
+    private readonly ISelectionPlanner? _selectionPlanner;
+    private readonly IWindowsPrivilegeService? _privilegeService;
+    private readonly INavigationService? _navigationService;
     private CancellationTokenSource? _scanCts;
+    private CancellationTokenSource? _backupCts;
     private readonly List<DiscoveredItem> _discoveredItems = [];
     private readonly Dictionary<string, bool> _selectionState = new(StringComparer.OrdinalIgnoreCase);
     private bool _isUpdatingTreeSelections;
@@ -35,6 +44,128 @@ public partial class BackupViewModel : ViewModelBase
 
     public IReadOnlyDictionary<string, bool> SelectionState => _selectionState;
     public IReadOnlyList<DiscoveredItem> DiscoveredItems => _discoveredItems;
+
+    // =========================================================================
+    // Active Backup & Real-time Telemetry Observables
+    // =========================================================================
+    [ObservableProperty]
+    private string _repositoryPath = string.Empty;
+
+    [ObservableProperty]
+    private string _repositoryPassword = "UniversalBackupLocalVaultKey";
+
+    [ObservableProperty]
+    private string _stagingDirectory = string.Empty;
+
+    [ObservableProperty]
+    private bool _isBackupActive;
+
+    [ObservableProperty]
+    private bool _canStartBackup;
+
+    [ObservableProperty]
+    private bool _isCancelling;
+
+    [ObservableProperty]
+    private bool _isBackupCompleted;
+
+    [ObservableProperty]
+    private bool _hasBackupFailed;
+
+    [ObservableProperty]
+    private bool _hasBackupCancelled;
+
+    [ObservableProperty]
+    private BackupJobPhase _currentJobPhase = BackupJobPhase.Preflight;
+
+    [ObservableProperty]
+    private string _jobPhaseDescription = "Ready";
+
+    [ObservableProperty]
+    private double _jobProgressPercent;
+
+    [ObservableProperty]
+    private string _formattedJobPercent = "0.0%";
+
+    [ObservableProperty]
+    private string _currentProcessingFile = string.Empty;
+
+    [ObservableProperty]
+    private string _liveTransferRate = "0 B/s";
+
+    [ObservableProperty]
+    private string _processedFilesProgressText = "0 files";
+
+    [ObservableProperty]
+    private string _transferredBytesProgressText = "0 B";
+
+    [ObservableProperty]
+    private string _elapsedTimeString = "00:00";
+
+    [ObservableProperty]
+    private string _remainingTimeString = "--";
+
+    [ObservableProperty]
+    private string _completionBadgeText = "Active";
+
+    [ObservableProperty]
+    private string _completionBadgeColor = "#3B82F6";
+
+    [ObservableProperty]
+    private string? _lastReceiptId;
+
+    [ObservableProperty]
+    private string? _lastBackupSetId;
+
+    // 4-Phase Stepper Status Flags
+    public bool IsStep1Active => CurrentJobPhase is BackupJobPhase.Preflight or BackupJobPhase.FreezingDescriptor;
+    public bool IsStep1Done => CurrentJobPhase > BackupJobPhase.FreezingDescriptor && !HasBackupCancelled && !HasBackupFailed;
+    public bool IsStep1Pending => !IsStep1Active && !IsStep1Done;
+
+    public bool IsStep2Active => CurrentJobPhase == BackupJobPhase.CapturingPayload;
+    public bool IsStep2Done => CurrentJobPhase > BackupJobPhase.CapturingPayload && !HasBackupCancelled && !HasBackupFailed;
+    public bool IsStep2Pending => !IsStep2Active && !IsStep2Done;
+
+    public bool IsStep3Active => CurrentJobPhase is BackupJobPhase.EvaluatingConsistency or BackupJobPhase.StagingReceipt or BackupJobPhase.CapturingControlReceipt;
+    public bool IsStep3Done => CurrentJobPhase > BackupJobPhase.CapturingControlReceipt && !HasBackupCancelled && !HasBackupFailed;
+    public bool IsStep3Pending => !IsStep3Active && !IsStep3Done;
+
+    public bool IsStep4Active => CurrentJobPhase == BackupJobPhase.Finalizing;
+    public bool IsStep4Done => CurrentJobPhase == BackupJobPhase.Complete;
+    public bool IsStep4Pending => !IsStep4Active && !IsStep4Done;
+
+    public string CancelButtonText => IsCancelling ? "Cancelling..." : "Cancel Backup";
+
+    partial void OnCurrentJobPhaseChanged(BackupJobPhase value)
+    {
+        OnPropertyChanged(nameof(IsStep1Active));
+        OnPropertyChanged(nameof(IsStep1Done));
+        OnPropertyChanged(nameof(IsStep1Pending));
+        OnPropertyChanged(nameof(IsStep2Active));
+        OnPropertyChanged(nameof(IsStep2Done));
+        OnPropertyChanged(nameof(IsStep2Pending));
+        OnPropertyChanged(nameof(IsStep3Active));
+        OnPropertyChanged(nameof(IsStep3Done));
+        OnPropertyChanged(nameof(IsStep3Pending));
+        OnPropertyChanged(nameof(IsStep4Active));
+        OnPropertyChanged(nameof(IsStep4Done));
+        OnPropertyChanged(nameof(IsStep4Pending));
+    }
+
+    partial void OnIsCancellingChanged(bool value)
+    {
+        OnPropertyChanged(nameof(CancelButtonText));
+    }
+
+    partial void OnIsBackupActiveChanged(bool value)
+    {
+        UpdateCanStartBackup();
+    }
+
+    partial void OnIsBusyChanged(bool value)
+    {
+        UpdateCanStartBackup();
+    }
 
     [ObservableProperty]
     private ObservableCollection<CategoryCardModel> _categoryCards = [];
@@ -138,18 +269,31 @@ public partial class BackupViewModel : ViewModelBase
 
     private List<TreeNodeItem> _rootNodes = [];
 
-    public BackupViewModel() : this(null, null)
+    public BackupViewModel() : this(null, null, null, null, null, null)
     {
     }
 
     public BackupViewModel(
         IDiscoveryScanner? discoveryScanner = null,
-        ICatalogService? catalogService = null)
+        ICatalogService? catalogService = null,
+        IDualSnapshotCommitCoordinator? commitCoordinator = null,
+        ISelectionPlanner? selectionPlanner = null,
+        IWindowsPrivilegeService? privilegeService = null,
+        INavigationService? navigationService = null)
     {
         _discoveryScanner = discoveryScanner;
         _catalogService = catalogService;
+        _commitCoordinator = commitCoordinator;
+        _selectionPlanner = selectionPlanner;
+        _privilegeService = privilegeService;
+        _navigationService = navigationService;
+
+        string localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        _repositoryPath = Path.Combine(localAppData, "UniversalBackup", "repositories", "default");
+        _stagingDirectory = Path.Combine(localAppData, "UniversalBackup", "staging");
 
         InitializeCategoryCards();
+        UpdateCanStartBackup();
     }
 
     private void InitializeCategoryCards()
@@ -517,6 +661,7 @@ public partial class BackupViewModel : ViewModelBase
             SelectedFormattedSize = CategoryCardModel.FormatBytes(bytes);
             HasLockedFilesWarning = lockedWarning;
             HasOfflineCloudWarning = offlineWarning;
+            UpdateCanStartBackup();
         });
     }
 
@@ -1033,5 +1178,240 @@ public partial class BackupViewModel : ViewModelBase
             }
         }
         return count;
+    }
+
+    public void UpdateCanStartBackup()
+    {
+        CanStartBackup = !IsBackupActive && !IsBusy && (SelectedItemsCount > 0 || _selectionState.Values.Any(v => v));
+    }
+
+    [RelayCommand]
+    public async Task StartBackupAsync()
+    {
+        if (IsBackupActive || IsBusy) return;
+
+        if (_commitCoordinator == null)
+        {
+            StatusMessage = "No backup commit coordinator configured.";
+            return;
+        }
+
+        IsBackupActive = true;
+        IsCancelling = false;
+        IsBackupCompleted = false;
+        HasBackupFailed = false;
+        HasBackupCancelled = false;
+        CurrentJobPhase = BackupJobPhase.Preflight;
+        JobPhaseDescription = "Initializing dual-snapshot backup...";
+        JobProgressPercent = 0.0;
+        FormattedJobPercent = "0.0%";
+        CurrentProcessingFile = "Preparing repository and frozen plan...";
+        LiveTransferRate = "0 B/s";
+        ProcessedFilesProgressText = "0 files";
+        TransferredBytesProgressText = "0 B";
+        ElapsedTimeString = "00:00";
+        RemainingTimeString = "Calculating...";
+        CompletionBadgeText = "Active";
+        CompletionBadgeColor = "#3B82F6";
+
+        _backupCts?.Cancel();
+        _backupCts = new CancellationTokenSource();
+        var ct = _backupCts.Token;
+
+        var presetEnum = SelectedPreset switch
+        {
+            "Personal Essentials" => BackupPreset.PersonalEssentials,
+            "Game Saves Only" => BackupPreset.GameSavesOnly,
+            "Games with Installations" => BackupPreset.GamesWithInstallations,
+            "Entire Accessible Computer" => BackupPreset.EntireAccessibleComputer,
+            _ => BackupPreset.Custom
+        };
+
+        var plan = new BackupPlan(
+            id: Guid.NewGuid(),
+            name: $"{SelectedPreset} Backup",
+            revision: 1,
+            preset: presetEnum,
+            destinationPolicy: new DestinationPolicy(RepositoryPath, RepositoryLocationType.Local),
+            targetCategories: SelectedCategoryCard != null ? [SelectedCategoryCard.CategoryKey] : []);
+
+        SelectionPlan selectionPlan;
+        if (_selectionPlanner != null)
+        {
+            selectionPlan = _selectionPlanner.ResolveSelection(plan, _discoveredItems, RepositoryPath, StagingDirectory);
+        }
+        else
+        {
+            var groups = new List<ResolvedSourceGroup>();
+            foreach (var kvp in _selectionState.Where(k => k.Value))
+            {
+                groups.Add(new ResolvedSourceGroup(
+                    Root: SourceRoot.Create(kvp.Key),
+                    ExclusionFilters: [],
+                    AssociatedComponentIds: []));
+            }
+            selectionPlan = new SelectionPlan(
+                SourceGroups: groups,
+                UniqueDiscoveredItems: _discoveredItems.Where(d => _selectionState.TryGetValue(d.Id, out bool s) && s).ToList(),
+                EstimatedSizeBytes: SelectedSizeBytes,
+                EstimatedFileCount: SelectedItemsCount,
+                Warnings: []);
+        }
+
+        var progress = new Progress<BackupJobProgress>(p =>
+        {
+            DispatchToUi(() => ApplyJobProgress(p));
+        });
+
+        var request = new DualSnapshotCommitRequest(
+            Plan: plan,
+            SelectionPlan: selectionPlan,
+            RepositoryPath: RepositoryPath,
+            RepositoryPassword: RepositoryPassword,
+            StagingDirectory: StagingDirectory,
+            UseVss: HasLockedFilesWarning && _privilegeService?.IsRunningAsAdministrator() == true,
+            Progress: progress);
+
+        try
+        {
+            var result = await Task.Run(async () =>
+            {
+                return await _commitCoordinator.ExecuteCommitAsync(request, ct).ConfigureAwait(false);
+            }, ct);
+
+            DispatchToUi(() => HandleBackupCompleted(result));
+        }
+        catch (OperationCanceledException)
+        {
+            DispatchToUi(() =>
+            {
+                HasBackupCancelled = true;
+                IsCancelling = false;
+                CompletionBadgeText = "Cancelled";
+                CompletionBadgeColor = "#64748B";
+                CurrentProcessingFile = "Backup was cancelled. Repository lock reclaimed.";
+                StatusMessage = "Backup cancelled by user.";
+            });
+        }
+        catch (Exception ex)
+        {
+            DispatchToUi(() =>
+            {
+                HasBackupFailed = true;
+                IsCancelling = false;
+                CompletionBadgeText = "Failed";
+                CompletionBadgeColor = "#EF4444";
+                CurrentProcessingFile = $"Backup error: {ex.Message}";
+                StatusMessage = $"Backup failed: {ex.Message}";
+            });
+        }
+        finally
+        {
+            DispatchToUi(() =>
+            {
+                UpdateCanStartBackup();
+            });
+        }
+    }
+
+    [RelayCommand]
+    public void CancelBackup()
+    {
+        if (IsCancelling || !IsBackupActive) return;
+        IsCancelling = true;
+        StatusMessage = "Cancelling backup job and releasing locks...";
+        _backupCts?.Cancel();
+    }
+
+    [RelayCommand]
+    public void DismissActiveBackup()
+    {
+        IsBackupActive = false;
+        IsCancelling = false;
+        IsBackupCompleted = false;
+        HasBackupFailed = false;
+        HasBackupCancelled = false;
+        StatusMessage = "Ready.";
+        UpdateCanStartBackup();
+    }
+
+    [RelayCommand]
+    public void ViewInActivity()
+    {
+        DismissActiveBackup();
+        _navigationService?.NavigateTo(NavigationSection.Activity);
+    }
+
+    private void HandleBackupCompleted(DualSnapshotCommitResult result)
+    {
+        IsCancelling = false;
+        LastBackupSetId = result.BackupSet.Id.ToString();
+        LastReceiptId = result.ReceiptReplica?.EngineSnapshotId ?? result.Receipt?.ReceiptSha256Checksum;
+
+        switch (result.Status)
+        {
+            case BackupJobStatus.Complete:
+                IsBackupCompleted = true;
+                CompletionBadgeText = "Verified Complete";
+                CompletionBadgeColor = "#10B981";
+                CurrentProcessingFile = "Snapshot verified and dual-snapshot commit finalized.";
+                StatusMessage = "Backup completed and verified successfully.";
+                break;
+
+            case BackupJobStatus.CompleteWithOmissions:
+                IsBackupCompleted = true;
+                CompletionBadgeText = "Complete (Omissions)";
+                CompletionBadgeColor = "#F59E0B";
+                CurrentProcessingFile = $"Committed with {result.BackupSet.OutcomeSummary.OmissionsCount} omitted file(s).";
+                StatusMessage = $"Backup completed with {result.BackupSet.OutcomeSummary.OmissionsCount} file omissions.";
+                break;
+
+            case BackupJobStatus.Incomplete:
+                IsBackupCompleted = true;
+                CompletionBadgeText = "Incomplete (Unconfirmed)";
+                CompletionBadgeColor = "#EF4444";
+                CurrentProcessingFile = "Receipt snapshot failed. Payload flagged as Incomplete.";
+                StatusMessage = "Backup marked Incomplete: Control receipt missing.";
+                break;
+
+            case BackupJobStatus.Cancelled:
+                HasBackupCancelled = true;
+                CompletionBadgeText = "Cancelled";
+                CompletionBadgeColor = "#64748B";
+                CurrentProcessingFile = "Backup cancelled. Stale repository locks reclaimed.";
+                StatusMessage = "Backup was cancelled.";
+                break;
+
+            default:
+                HasBackupFailed = true;
+                CompletionBadgeText = "Failed";
+                CompletionBadgeColor = "#EF4444";
+                CurrentProcessingFile = result.ErrorMessage ?? "Backup failed.";
+                StatusMessage = $"Backup failed: {result.ErrorMessage}";
+                break;
+        }
+    }
+
+    private void ApplyJobProgress(BackupJobProgress p)
+    {
+        CurrentJobPhase = p.Phase;
+        JobPhaseDescription = p.PhaseDescription;
+        JobProgressPercent = p.OverallPercent;
+        FormattedJobPercent = $"{p.OverallPercent:F1}%";
+        if (!string.IsNullOrWhiteSpace(p.CurrentFile))
+        {
+            CurrentProcessingFile = p.CurrentFile;
+        }
+        LiveTransferRate = p.FormattedTransferRate;
+        ProcessedFilesProgressText = p.TotalFiles > 0
+            ? $"{p.FilesProcessed:N0} / {p.TotalFiles:N0} files"
+            : $"{p.FilesProcessed:N0} files";
+        TransferredBytesProgressText = p.TotalBytes > 0
+            ? $"{BackupJobProgress.FormatBytes(p.BytesTransferred)} / {BackupJobProgress.FormatBytes(p.TotalBytes)}"
+            : BackupJobProgress.FormatBytes(p.BytesTransferred);
+        ElapsedTimeString = BackupJobProgress.FormatDuration(p.ElapsedTime);
+        RemainingTimeString = p.EstimatedTimeRemaining.HasValue
+            ? $"{BackupJobProgress.FormatDuration(p.EstimatedTimeRemaining.Value)} remaining"
+            : (p.IsActive ? "Calculating..." : "--");
     }
 }

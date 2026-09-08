@@ -53,7 +53,7 @@
             </Border>
 
             <!-- Search and Filter Bar -->
-            <Grid ColumnDefinitions="*,16,160">
+            <Grid ColumnDefinitions="*,16,140,16,140">
                 <TextBox Grid.Column="0"
                          Text="{Binding SearchQuery}"
                          Watermark="Search activity by title, receipt ID, or log text..."
@@ -61,11 +61,18 @@
                          CornerRadius="6" />
 
                 <ComboBox Grid.Column="2"
+                          ItemsSource="{Binding JobTypeFilters}"
+                          SelectedItem="{Binding SelectedJobTypeFilter}"
+                          HorizontalAlignment="Stretch"
+                          CornerRadius="6" />
+
+                <ComboBox Grid.Column="4"
                           ItemsSource="{Binding StatusFilters}"
                           SelectedItem="{Binding SelectedStatusFilter}"
                           HorizontalAlignment="Stretch"
                           CornerRadius="6" />
             </Grid>
+
 
             <!-- Master-Detail Layout (2 Columns) -->
             <Grid ColumnDefinitions="*,16,360" MinHeight="380">
@@ -150,28 +157,32 @@
                             </StackPanel>
 
                             <!-- Key Metrics Grid -->
-                            <Grid ColumnDefinitions="120,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto" Margin="0,4,0,0">
-                                <TextBlock Grid.Row="0" Grid.Column="0" Text="Status:" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6" />
-                                <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding SelectedLog.Status}" FontSize="12" Foreground="{Binding SelectedLog.StatusBadgeColor}" FontWeight="Bold" Margin="0,0,0,6" />
+                            <Grid ColumnDefinitions="120,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto" Margin="0,4,0,0">
+                                <TextBlock Grid.Row="0" Grid.Column="0" Text="Job Type:" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6" />
+                                <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding SelectedLog.JobType}" FontSize="12" FontWeight="Bold" Margin="0,0,0,6" />
 
-                                <TextBlock Grid.Row="1" Grid.Column="0" Text="Start Time:" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6" />
-                                <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding SelectedLog.FormattedTimestamp}" FontSize="12" Margin="0,0,0,6" />
+                                <TextBlock Grid.Row="1" Grid.Column="0" Text="Status:" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6" />
+                                <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding SelectedLog.Status}" FontSize="12" Foreground="{Binding SelectedLog.StatusBadgeColor}" FontWeight="Bold" Margin="0,0,0,6" />
 
-                                <TextBlock Grid.Row="2" Grid.Column="0" Text="Duration:" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6" />
-                                <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding SelectedLog.DurationText}" FontSize="12" Margin="0,0,0,6" />
+                                <TextBlock Grid.Row="2" Grid.Column="0" Text="Start Time:" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6" />
+                                <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding SelectedLog.FormattedTimestamp}" FontSize="12" Margin="0,0,0,6" />
 
-                                <TextBlock Grid.Row="3" Grid.Column="0" Text="Files Captured:" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6" />
-                                <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding SelectedLog.FilesProcessed}" FontSize="12" Margin="0,0,0,6" />
+                                <TextBlock Grid.Row="3" Grid.Column="0" Text="Duration:" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6" />
+                                <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding SelectedLog.DurationText}" FontSize="12" Margin="0,0,0,6" />
 
-                                <TextBlock Grid.Row="4" Grid.Column="0" Text="Transferred:" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6" />
-                                <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding SelectedLog.BytesTransferredText}" FontSize="12" Margin="0,0,0,6" />
+                                <TextBlock Grid.Row="4" Grid.Column="0" Text="Items / Files:" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6" />
+                                <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding SelectedLog.FilesProcessed}" FontSize="12" Margin="0,0,0,6" />
 
-                                <TextBlock Grid.Row="5" Grid.Column="0" Text="Receipt ID:" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6" />
-                                <TextBlock Grid.Row="5" Grid.Column="1" Text="{Binding SelectedLog.ReceiptId}" FontSize="11" Margin="0,0,0,6" TextTrimming="CharacterEllipsis" />
+                                <TextBlock Grid.Row="5" Grid.Column="0" Text="Processed Size:" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6" />
+                                <TextBlock Grid.Row="5" Grid.Column="1" Text="{Binding SelectedLog.BytesTransferredText}" FontSize="12" Margin="0,0,0,6" />
 
-                                <TextBlock Grid.Row="6" Grid.Column="0" Text="Consistency:" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6" />
-                                <TextBlock Grid.Row="6" Grid.Column="1" Text="{Binding SelectedLog.ConsistencyClass}" FontSize="12" Margin="0,0,0,6" />
+                                <TextBlock Grid.Row="6" Grid.Column="0" Text="Receipt / Ref:" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6" />
+                                <TextBlock Grid.Row="6" Grid.Column="1" Text="{Binding SelectedLog.ReceiptId}" FontSize="11" Margin="0,0,0,6" TextTrimming="CharacterEllipsis" />
+
+                                <TextBlock Grid.Row="7" Grid.Column="0" Text="Classification:" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6" />
+                                <TextBlock Grid.Row="7" Grid.Column="1" Text="{Binding SelectedLog.ConsistencyClass}" FontSize="12" Margin="0,0,0,6" />
                             </Grid>
+
 
                             <!-- Log Excerpt Box -->
                             <StackPanel Spacing="6">

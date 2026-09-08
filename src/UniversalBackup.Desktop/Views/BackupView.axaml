@@ -8,7 +8,9 @@
              x:Class="UniversalBackup.Desktop.Views.BackupView"
              x:DataType="vm:BackupViewModel">
 
-    <Grid RowDefinitions="Auto,Auto,Auto,*,Auto" Margin="24">
+    <Grid>
+        <!-- Main Backup Configuration & Discovery View -->
+        <Grid RowDefinitions="Auto,Auto,Auto,*,Auto" Margin="24">
 
         <!-- ================================================================= -->
         <!-- 1. Header & Primary Action Bar                                     -->
@@ -583,6 +585,18 @@
                         </StackPanel>
                     </Border>
 
+                    <!-- Primary Action: Run Dual-Snapshot Backup -->
+                    <Button Command="{Binding StartBackupCommand}"
+                            Classes="accent"
+                            IsEnabled="{Binding CanStartBackup}"
+                            Padding="16,6"
+                            ToolTip.Tip="Start dual-snapshot backup of all selected items">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <PathIcon Data="{StaticResource NavIconBackup}" Width="13" Height="13" />
+                            <TextBlock Text="Back Up Now" FontWeight="SemiBold" FontSize="12" />
+                        </StackPanel>
+                    </Button>
+
                     <!-- Telemetry note -->
                     <TextBlock Text="Tree: Virtualized (60 FPS)"
                                FontSize="11"
@@ -592,5 +606,319 @@
             </Grid>
         </Border>
 
+        </Grid>
+
+        <!-- ================================================================= -->
+        <!-- 6. Real-Time Active Backup Execution Overlay Modal                 -->
+        <!-- ================================================================= -->
+        <Grid IsVisible="{Binding IsBackupActive}">
+            <!-- Semi-transparent glass backdrop -->
+            <Border Background="#B3050811" />
+
+            <!-- Centered Modern Card -->
+            <Border HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    Width="740"
+                    MaxWidth="800"
+                    Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
+                    BorderBrush="{DynamicResource SystemControlTransientBorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="12"
+                    Padding="28">
+                <StackPanel Orientation="Vertical" Spacing="20">
+
+                    <!-- 1. Header Row -->
+                    <Grid ColumnDefinitions="Auto,*,Auto">
+                        <!-- Glowing Icon Container -->
+                        <Border Grid.Column="0"
+                                Width="44" Height="44"
+                                CornerRadius="10"
+                                Background="{DynamicResource SystemControlHighlightListLowBrush}"
+                                VerticalAlignment="Center"
+                                Margin="0,0,14,0">
+                            <PathIcon Data="{StaticResource NavIconBackup}"
+                                      Width="20" Height="20"
+                                      Foreground="{DynamicResource SystemControlHighlightAccentBrush}"
+                                      HorizontalAlignment="Center"
+                                      VerticalAlignment="Center" />
+                        </Border>
+
+                        <!-- Title & Phase Description -->
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="3">
+                            <TextBlock Text="Dual-Snapshot Backup Protocol"
+                                       FontSize="17"
+                                       FontWeight="Bold"
+                                       Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}" />
+                            <TextBlock Text="{Binding JobPhaseDescription}"
+                                       FontSize="12"
+                                       Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+                                       TextTrimming="CharacterEllipsis" />
+                        </StackPanel>
+
+                        <!-- Status Badge Pill -->
+                        <Border Grid.Column="2"
+                                Background="{Binding CompletionBadgeColor}"
+                                CornerRadius="6"
+                                Padding="12,5"
+                                VerticalAlignment="Center">
+                            <TextBlock Text="{Binding CompletionBadgeText}"
+                                       FontSize="11"
+                                       FontWeight="Bold"
+                                       Foreground="White" />
+                        </Border>
+                    </Grid>
+
+                    <Separator Background="{DynamicResource SystemControlTransientBorderBrush}" Height="1" />
+
+                    <!-- 2. 4-Phase Horizontal Progress Stepper -->
+                    <Grid ColumnDefinitions="*,Auto,*,Auto,*,Auto,*">
+                        <!-- Step 1: Plan Freeze -->
+                        <StackPanel Grid.Column="0" HorizontalAlignment="Center" Spacing="6">
+                            <Panel Width="28" Height="28" HorizontalAlignment="Center">
+                                <Border IsVisible="{Binding IsStep1Done}" Width="28" Height="28" CornerRadius="14" Background="#10B981">
+                                    <TextBlock Text="✓" FontSize="13" FontWeight="Bold" Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                </Border>
+                                <Border IsVisible="{Binding IsStep1Active}" Width="28" Height="28" CornerRadius="14" Background="{DynamicResource SystemControlHighlightAccentBrush}">
+                                    <TextBlock Text="1" FontSize="12" FontWeight="Bold" Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                </Border>
+                                <Border IsVisible="{Binding IsStep1Pending}" Width="28" Height="28" CornerRadius="14" Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}">
+                                    <TextBlock Text="1" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                </Border>
+                            </Panel>
+                            <TextBlock Text="Plan Freeze" FontSize="11" FontWeight="SemiBold" HorizontalAlignment="Center" Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}" />
+                        </StackPanel>
+
+                        <!-- Connector Line 1-2 -->
+                        <Border Grid.Column="1" Height="2" Width="60" Background="{DynamicResource SystemControlTransientBorderBrush}" VerticalAlignment="Center" Margin="0,0,0,16" />
+
+                        <!-- Step 2: Data Snapshot -->
+                        <StackPanel Grid.Column="2" HorizontalAlignment="Center" Spacing="6">
+                            <Panel Width="28" Height="28" HorizontalAlignment="Center">
+                                <Border IsVisible="{Binding IsStep2Done}" Width="28" Height="28" CornerRadius="14" Background="#10B981">
+                                    <TextBlock Text="✓" FontSize="13" FontWeight="Bold" Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                </Border>
+                                <Border IsVisible="{Binding IsStep2Active}" Width="28" Height="28" CornerRadius="14" Background="{DynamicResource SystemControlHighlightAccentBrush}">
+                                    <TextBlock Text="2" FontSize="12" FontWeight="Bold" Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                </Border>
+                                <Border IsVisible="{Binding IsStep2Pending}" Width="28" Height="28" CornerRadius="14" Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}">
+                                    <TextBlock Text="2" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                </Border>
+                            </Panel>
+                            <TextBlock Text="Data Snapshot" FontSize="11" FontWeight="SemiBold" HorizontalAlignment="Center" Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}" />
+                        </StackPanel>
+
+                        <!-- Connector Line 2-3 -->
+                        <Border Grid.Column="3" Height="2" Width="60" Background="{DynamicResource SystemControlTransientBorderBrush}" VerticalAlignment="Center" Margin="0,0,0,16" />
+
+                        <!-- Step 3: Control Receipt -->
+                        <StackPanel Grid.Column="4" HorizontalAlignment="Center" Spacing="6">
+                            <Panel Width="28" Height="28" HorizontalAlignment="Center">
+                                <Border IsVisible="{Binding IsStep3Done}" Width="28" Height="28" CornerRadius="14" Background="#10B981">
+                                    <TextBlock Text="✓" FontSize="13" FontWeight="Bold" Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                </Border>
+                                <Border IsVisible="{Binding IsStep3Active}" Width="28" Height="28" CornerRadius="14" Background="{DynamicResource SystemControlHighlightAccentBrush}">
+                                    <TextBlock Text="3" FontSize="12" FontWeight="Bold" Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                </Border>
+                                <Border IsVisible="{Binding IsStep3Pending}" Width="28" Height="28" CornerRadius="14" Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}">
+                                    <TextBlock Text="3" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                </Border>
+                            </Panel>
+                            <TextBlock Text="Control Receipt" FontSize="11" FontWeight="SemiBold" HorizontalAlignment="Center" Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}" />
+                        </StackPanel>
+
+                        <!-- Connector Line 3-4 -->
+                        <Border Grid.Column="5" Height="2" Width="60" Background="{DynamicResource SystemControlTransientBorderBrush}" VerticalAlignment="Center" Margin="0,0,0,16" />
+
+                        <!-- Step 4: Finalized -->
+                        <StackPanel Grid.Column="6" HorizontalAlignment="Center" Spacing="6">
+                            <Panel Width="28" Height="28" HorizontalAlignment="Center">
+                                <Border IsVisible="{Binding IsStep4Done}" Width="28" Height="28" CornerRadius="14" Background="#10B981">
+                                    <TextBlock Text="✓" FontSize="13" FontWeight="Bold" Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                </Border>
+                                <Border IsVisible="{Binding IsStep4Active}" Width="28" Height="28" CornerRadius="14" Background="{DynamicResource SystemControlHighlightAccentBrush}">
+                                    <TextBlock Text="4" FontSize="12" FontWeight="Bold" Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                </Border>
+                                <Border IsVisible="{Binding IsStep4Pending}" Width="28" Height="28" CornerRadius="14" Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}">
+                                    <TextBlock Text="4" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                </Border>
+                            </Panel>
+                            <TextBlock Text="Finalized" FontSize="11" FontWeight="SemiBold" HorizontalAlignment="Center" Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}" />
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- 3. Linear Progress Bar & Percentage -->
+                    <StackPanel Spacing="6">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <TextBlock Text="Overall Commit Progress"
+                                       FontSize="11"
+                                       FontWeight="SemiBold"
+                                       Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                            <TextBlock Grid.Column="1"
+                                       Text="{Binding FormattedJobPercent}"
+                                       FontSize="14"
+                                       FontWeight="Bold"
+                                       Foreground="{DynamicResource SystemControlHighlightAccentBrush}" />
+                        </Grid>
+                        <ProgressBar Value="{Binding JobProgressPercent}"
+                                     Minimum="0"
+                                     Maximum="100"
+                                     Height="8"
+                                     CornerRadius="4" />
+                    </StackPanel>
+
+                    <!-- 4. Telemetry Metric Tiles (4x1 UniformGrid) -->
+                    <UniformGrid Columns="4" Rows="1">
+                        <!-- Tile 1: Transfer Rate -->
+                        <Border Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"
+                                BorderBrush="{DynamicResource SystemControlTransientBorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="8"
+                                Padding="12,10"
+                                Margin="0,0,8,0">
+                            <StackPanel Spacing="4">
+                                <TextBlock Text="TRANSFER SPEED"
+                                           FontSize="10"
+                                           FontWeight="Bold"
+                                           Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                                <TextBlock Text="{Binding LiveTransferRate}"
+                                           FontSize="14"
+                                           FontWeight="Bold"
+                                           Foreground="#10B981" />
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Tile 2: Remaining Time -->
+                        <Border Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"
+                                BorderBrush="{DynamicResource SystemControlTransientBorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="8"
+                                Padding="12,10"
+                                Margin="4,0">
+                            <StackPanel Spacing="4">
+                                <TextBlock Text="ESTIMATED REMAINING"
+                                           FontSize="10"
+                                           FontWeight="Bold"
+                                           Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                                <TextBlock Text="{Binding RemainingTimeString}"
+                                           FontSize="14"
+                                           FontWeight="Bold"
+                                           Foreground="#38BDF8" />
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Tile 3: Files Processed -->
+                        <Border Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"
+                                BorderBrush="{DynamicResource SystemControlTransientBorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="8"
+                                Padding="12,10"
+                                Margin="4,0">
+                            <StackPanel Spacing="4">
+                                <TextBlock Text="FILES PROCESSED"
+                                           FontSize="10"
+                                           FontWeight="Bold"
+                                           Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                                <TextBlock Text="{Binding ProcessedFilesProgressText}"
+                                           FontSize="14"
+                                           FontWeight="Bold"
+                                           Foreground="#A855F7" />
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Tile 4: Transferred Bytes -->
+                        <Border Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"
+                                BorderBrush="{DynamicResource SystemControlTransientBorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="8"
+                                Padding="12,10"
+                                Margin="8,0,0,0">
+                            <StackPanel Spacing="4">
+                                <TextBlock Text="DATA TRANSFERRED"
+                                           FontSize="10"
+                                           FontWeight="Bold"
+                                           Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                                <TextBlock Text="{Binding TransferredBytesProgressText}"
+                                           FontSize="14"
+                                           FontWeight="Bold"
+                                           Foreground="#F59E0B" />
+                            </StackPanel>
+                        </Border>
+                    </UniformGrid>
+
+                    <!-- 5. Active File Monospace Ticker -->
+                    <Border Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"
+                            BorderBrush="{DynamicResource SystemControlTransientBorderBrush}"
+                            BorderThickness="1"
+                            CornerRadius="6"
+                            Padding="12,8">
+                        <Grid ColumnDefinitions="Auto,*">
+                            <TextBlock Grid.Column="0"
+                                       Text="ACTIVE FILE: "
+                                       FontSize="10"
+                                       FontWeight="Bold"
+                                       Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+                                       VerticalAlignment="Center"
+                                       Margin="0,0,8,0" />
+                            <SelectableTextBlock Grid.Column="1"
+                                                 Text="{Binding CurrentProcessingFile}"
+                                                 FontSize="11"
+                                                 FontFamily="Consolas, monospace"
+                                                 Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}"
+                                                 TextTrimming="CharacterEllipsis"
+                                                 VerticalAlignment="Center" />
+                        </Grid>
+                    </Border>
+
+                    <!-- 6. Footer Action Row -->
+                    <Grid ColumnDefinitions="*,Auto">
+                        <!-- Left: Elapsed Duration & Set Id -->
+                        <StackPanel Grid.Column="0" VerticalAlignment="Center" Spacing="2">
+                            <TextBlock Text="{Binding ElapsedTimeString, StringFormat='Elapsed Duration: {0}'}"
+                                       FontSize="12"
+                                       Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                            <TextBlock Text="{Binding LastReceiptId, StringFormat='Receipt ID: {0}'}"
+                                       FontSize="10"
+                                       FontFamily="Consolas, monospace"
+                                       Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+                                       IsVisible="{Binding LastReceiptId, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                        </StackPanel>
+
+                        <!-- Right Action Buttons -->
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                            <!-- In-Progress Danger Cancellation Button -->
+                            <Button Command="{Binding CancelBackupCommand}"
+                                    Classes="danger"
+                                    IsVisible="{Binding !IsBackupCompleted}"
+                                    IsEnabled="{Binding !IsCancelling}"
+                                    Padding="16,8">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <TextBlock Text="✕" FontSize="11" FontWeight="Bold" />
+                                    <TextBlock Text="{Binding CancelButtonText}" FontWeight="SemiBold" />
+                                </StackPanel>
+                            </Button>
+
+                            <!-- Post-Completion Dismiss Button -->
+                            <Button Command="{Binding DismissActiveBackupCommand}"
+                                    IsVisible="{Binding IsBackupCompleted}"
+                                    Padding="14,8">
+                                <TextBlock Text="Dismiss" FontWeight="SemiBold" />
+                            </Button>
+
+                            <!-- Post-Completion View In Activity Log -->
+                            <Button Command="{Binding ViewInActivityCommand}"
+                                    Classes="accent"
+                                    IsVisible="{Binding IsBackupCompleted}"
+                                    Padding="16,8">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <PathIcon Data="{StaticResource NavIconActivity}" Width="13" Height="13" />
+                                    <TextBlock Text="View in Activity Log" FontWeight="SemiBold" />
+                                </StackPanel>
+                            </Button>
+                        </StackPanel>
+                    </Grid>
+
+                </StackPanel>
+            </Border>
+        </Grid>
     </Grid>
 </UserControl>

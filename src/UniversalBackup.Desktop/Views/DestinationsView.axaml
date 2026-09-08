@@ -200,6 +200,12 @@
                                         Classes="accent"
                                         Padding="14,6"
                                         CornerRadius="4" />
+                                <Button Content="Replicate Latest"
+                                        Command="{Binding ReplicateToGoogleDriveCommand}"
+                                        IsVisible="{Binding IsGoogleDriveConnected}"
+                                        Classes="accent"
+                                        Padding="12,6"
+                                        CornerRadius="4" />
                                 <Button Content="Disconnect"
                                         Command="{Binding DisconnectGoogleDriveCommand}"
                                         IsVisible="{Binding IsGoogleDriveConnected}"
@@ -241,6 +247,12 @@
                                         Classes="accent"
                                         Padding="14,6"
                                         CornerRadius="4" />
+                                <Button Content="Replicate Latest"
+                                        Command="{Binding ReplicateToOneDriveCommand}"
+                                        IsVisible="{Binding IsOneDriveConnected}"
+                                        Classes="accent"
+                                        Padding="12,6"
+                                        CornerRadius="4" />
                                 <Button Content="Disconnect"
                                         Command="{Binding DisconnectOneDriveCommand}"
                                         IsVisible="{Binding IsOneDriveConnected}"
@@ -251,6 +263,29 @@
                     </Border>
                 </StackPanel>
             </StackPanel>
+
+            <!-- Authentication Progress Bar -->
+            <ProgressBar IsIndeterminate="True"
+                         IsVisible="{Binding IsAuthenticating}"
+                         Height="4"
+                         CornerRadius="2"
+                         Foreground="{DynamicResource SystemControlHighlightAccentBrush}" />
+
+            <!-- Replication Progress Card -->
+            <Border IsVisible="{Binding IsReplicating}"
+                    Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
+                    BorderBrush="{DynamicResource SystemControlHighlightAccentBrush}"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    Padding="16">
+                <StackPanel Spacing="8">
+                    <Grid ColumnDefinitions="*,Auto">
+                        <TextBlock Text="{Binding ReplicationStatusMessage}" FontSize="12" FontWeight="SemiBold" />
+                        <TextBlock Grid.Column="1" Text="{Binding ReplicationProgressPercent, StringFormat='{}{0:N0}%'}" FontSize="12" FontWeight="Bold" Foreground="{DynamicResource SystemControlHighlightAccentBrush}" />
+                    </Grid>
+                    <ProgressBar Value="{Binding ReplicationProgressPercent}" Minimum="0" Maximum="100" Height="6" CornerRadius="3" Foreground="{DynamicResource SystemControlHighlightAccentBrush}" />
+                </StackPanel>
+            </Border>
 
             <!-- Status Banner -->
             <TextBlock Text="{Binding StatusMessage}"

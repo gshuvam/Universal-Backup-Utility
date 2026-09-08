@@ -1,4 +1,5 @@
 using UniversalBackup.Application.DTOs;
+using UniversalBackup.Domain.Models;
 
 namespace UniversalBackup.Application.Common.Interfaces;
 
@@ -21,4 +22,17 @@ public interface IResticEngine
     Task ChangePasswordAsync(string repositoryPath, string currentPassword, string newPassword, CancellationToken cancellationToken = default);
     Task<ResticPruneResult> PruneRepositoryAsync(string repositoryPath, string password, ResticPruneOptions? options = null, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<ResticKeyInfo>> ListKeysAsync(string repositoryPath, string password, CancellationToken cancellationToken = default);
+    Task<ResticForgetResult> ForgetAsync(string repositoryPath, string password, ResticForgetOptions options, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<ResticFileNode>> ListSnapshotFilesAsync(string repositoryPath, string password, string snapshotId, CancellationToken cancellationToken = default);
+    Task<ResticCopyResult> CopySnapshotAsync(
+        string sourceRepositoryPath,
+        string sourcePassword,
+        string destinationRepositoryPath,
+        string destinationPassword,
+        string snapshotId,
+        IDictionary<string, string>? environmentVariables = null,
+        string? uploadLimit = null,
+        IProgress<string>? progress = null,
+        CancellationToken cancellationToken = default);
 }
+

@@ -31,8 +31,15 @@ public static class ServiceConfiguration
         services.AddSingleton<IWindowsPrivilegeService, WindowsPrivilegeService>();
         services.AddSingleton<IResticBinaryResolver, ResticBinaryResolver>();
         services.AddSingleton<IResticEngine, ResticCliAdapter>();
-        services.AddSingleton<ICloudOAuthService, CloudOAuthService>();
+        services.AddSingleton(new System.Net.Http.HttpClient());
+        services.AddSingleton<ISecureCredentialStorage, DpapiSecureCredentialStorage>();
+        services.AddSingleton<ICloudOAuthService>(sp =>
+            new CloudOAuthService(
+                sp.GetService<System.Net.Http.HttpClient>(),
+                sp.GetService<ISecureCredentialStorage>()));
         services.AddSingleton<ILudusaviComplianceService, LudusaviComplianceService>();
+        services.AddSingleton<INetworkConditionService, NetworkConditionService>();
+        services.AddSingleton<ICloudHealthAndQuotaService, CloudHealthAndQuotaService>();
         services.AddSingleton<PlatformVolumeEnumerator>();
         services.AddSingleton<KnownFoldersResolver>();
         services.AddSingleton<CloudPlaceholderDetector>();
@@ -45,10 +52,21 @@ public static class ServiceConfiguration
         services.AddSingleton<CatalogMigrationRunner>();
         services.AddSingleton<ICatalogService, SqliteCatalogService>();
 
-        // 4. Application Planning & Discovery Services
+        // 4. Application Planning, Consistency & Commit Protocol Services
         services.AddSingleton<ISelectionPlanner, SelectionPlanner>();
         services.AddSingleton<IBackupDescriptorService, BackupDescriptorService>();
+        services.AddSingleton<IConsistencyTracker, ConsistencyTracker>();
+        services.AddSingleton<IBackupReceiptService, BackupReceiptService>();
+        services.AddSingleton<IPostBackupLifecycleCoordinator, PostBackupLifecycleCoordinator>();
+        services.AddSingleton<IDualSnapshotCommitCoordinator, DualSnapshotCommitCoordinator>();
         services.AddSingleton<IDiscoveryScanner, ProgressiveDiscoveryScanner>();
+        services.AddSingleton<ISnapshotTimelineService, SnapshotTimelineService>();
+        services.AddSingleton<IProcessConflictDetector, ProcessConflictDetector>();
+        services.AddSingleton<IRestorePlanner, RestorePlanner>();
+        services.AddSingleton<IPreimageJournalService, PreimageJournalService>();
+        services.AddSingleton<IRestoreExecutionCoordinator, RestoreExecutionCoordinator>();
+        services.AddSingleton<ICloudReplicationCoordinator, CloudReplicationCoordinator>();
+
 
         // 5. Shell & Page ViewModels
         services.AddSingleton<MainViewModel>();

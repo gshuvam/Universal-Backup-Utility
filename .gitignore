@@ -545,8 +545,5 @@ binaries/
 .agents/
 .agents
 
-# Unit and integration test suites
-tests/
-tests
 
 
