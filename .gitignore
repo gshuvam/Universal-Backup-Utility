@@ -531,8 +531,11 @@ rclone.conf.*
 appsettings.Local.json
 appsettings.Development.json
 
-# Downloaded engine sidecars (restic / rclone binaries during local testing)
+# Downloaded engine sidecars and release artifacts
 binaries/
+dist/
+artifacts/
+runtimes/
 /restic.exe
 /restic
 /rclone.exe

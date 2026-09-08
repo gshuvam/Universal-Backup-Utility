@@ -1,0 +1,19 @@
+#!/bin/sh
+set -e
+
+# AppRun script for Universal Backup Utility AppImage
+HERE="$(dirname "$(readlink -f "${0}")")"
+
+export APPDIR="${HERE}"
+export PATH="${HERE}/usr/bin:${HERE}/usr/lib/universalbackup:${PATH}"
+export LD_LIBRARY_PATH="${HERE}/usr/lib:${HERE}/usr/lib/universalbackup:${LD_LIBRARY_PATH}"
+export XDG_DATA_DIRS="${HERE}/usr/share:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
+
+# If first parameter is cli subcommand, forward directly to CLI worker
+if [ "${1}" = "cli" ] || [ "${1}" = "run-plan" ] || [ "${1}" = "rebuild-catalog" ] || [ "${1}" = "restore" ] || [ "${1}" = "list-snapshots" ]; then
+    shift
+    exec "${HERE}/usr/bin/UniversalBackup.Cli" "$@"
+fi
+
+# Default to Desktop UI
+exec "${HERE}/usr/bin/UniversalBackup.Desktop" "$@"

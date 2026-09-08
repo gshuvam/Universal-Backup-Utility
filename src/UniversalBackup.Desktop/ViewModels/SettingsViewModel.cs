@@ -7,6 +7,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using UniversalBackup.Application.Common.Interfaces;
 using UniversalBackup.Desktop.Services;
+using UniversalBackup.Domain.Models;
 
 namespace UniversalBackup.Desktop.ViewModels;
 
@@ -17,6 +18,8 @@ public partial class SettingsViewModel : ViewModelBase
 {
     private readonly IThemeService _themeService;
     private readonly IResticBinaryResolver? _resticResolver;
+    private readonly IRcloneBinaryResolver? _rcloneResolver;
+    private readonly IBinaryVerificationService? _verificationService;
     private readonly IEmergencyRecoveryKitService? _recoveryKitService;
     private readonly ICatalogService? _catalogService;
 
@@ -71,11 +74,15 @@ public partial class SettingsViewModel : ViewModelBase
     public SettingsViewModel(
         IThemeService themeService,
         IResticBinaryResolver? resticResolver = null,
+        IRcloneBinaryResolver? rcloneResolver = null,
+        IBinaryVerificationService? verificationService = null,
         IEmergencyRecoveryKitService? recoveryKitService = null,
         ICatalogService? catalogService = null)
     {
         _themeService = themeService;
         _resticResolver = resticResolver;
+        _rcloneResolver = rcloneResolver;
+        _verificationService = verificationService;
         _recoveryKitService = recoveryKitService;
         _catalogService = catalogService;
         _selectedTheme = themeService.CurrentTheme;
@@ -100,20 +107,51 @@ public partial class SettingsViewModel : ViewModelBase
     {
         try
         {
-            if (_resticResolver != null && _resticResolver.IsBinaryAvailable())
+            if (_verificationService != null)
             {
-                ResticPath = _resticResolver.ResolveBinaryPath();
-                ResticStatusMessage = "Verified restic binary ready for backup operations.";
+                // Live verification
+                Task.Run(async () =>
+                {
+                    var resticReport = await _verificationService.VerifyBinaryAsync(EngineBinaryType.Restic);
+                    var rcloneReport = await _verificationService.VerifyBinaryAsync(EngineBinaryType.Rclone);
+
+                    ResticPath = resticReport.ResolvedPath ?? "restic (not found)";
+                    ResticStatusMessage = $"[{resticReport.Status}] {resticReport.Message}";
+
+                    RclonePath = rcloneReport.ResolvedPath ?? "rclone (not found)";
+                    RcloneStatusMessage = $"[{rcloneReport.Status}] {rcloneReport.Message}";
+
+                    StatusMessage = resticReport.IsOperational && rcloneReport.IsOperational
+                        ? "Engine runtimes verified and operational."
+                        : "One or more engine runtimes require configuration.";
+                });
             }
             else
             {
-                ResticPath = "restic (bundled / PATH)";
-                ResticStatusMessage = "Engine will use standard system lookup.";
-            }
+                if (_resticResolver != null && _resticResolver.IsBinaryAvailable())
+                {
+                    ResticPath = _resticResolver.ResolveBinaryPath();
+                    ResticStatusMessage = "Verified restic binary ready for backup operations.";
+                }
+                else
+                {
+                    ResticPath = "restic (bundled / PATH)";
+                    ResticStatusMessage = "Engine will use standard system lookup.";
+                }
 
-            RclonePath = "rclone (bundled / PATH)";
-            RcloneStatusMessage = "Cloud transport engine will use standard system lookup.";
-            StatusMessage = "Engine binaries verified.";
+                if (_rcloneResolver != null && _rcloneResolver.IsBinaryAvailable())
+                {
+                    RclonePath = _rcloneResolver.ResolveBinaryPath();
+                    RcloneStatusMessage = "Verified rclone binary ready for cloud replication.";
+                }
+                else
+                {
+                    RclonePath = "rclone (bundled / PATH)";
+                    RcloneStatusMessage = "Cloud transport engine will use standard system lookup.";
+                }
+
+                StatusMessage = "Engine binaries resolved.";
+            }
         }
         catch (Exception ex)
         {

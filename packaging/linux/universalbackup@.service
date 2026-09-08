@@ -1,0 +1,16 @@
+[Unit]
+Description=Universal Backup Scheduled Execution for Plan %i
+Documentation=https://github.com/gshuvam/Universal-Backup-Utility
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/UniversalBackup.Cli run-plan --id %i --suppress-gaming
+Nice=19
+IOSchedulingClass=idle
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target

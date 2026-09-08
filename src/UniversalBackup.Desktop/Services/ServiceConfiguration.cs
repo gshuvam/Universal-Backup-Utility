@@ -32,6 +32,8 @@ public static class ServiceConfiguration
         // 2. Infrastructure & Platform Services
         services.AddSingleton<IWindowsPrivilegeService, WindowsPrivilegeService>();
         services.AddSingleton<IResticBinaryResolver, ResticBinaryResolver>();
+        services.AddSingleton<IRcloneBinaryResolver, RcloneBinaryResolver>();
+        services.AddSingleton<IBinaryVerificationService, BinaryVerificationService>();
         services.AddSingleton<IResticEngine, ResticCliAdapter>();
         services.AddSingleton(new System.Net.Http.HttpClient());
         services.AddSingleton<ISecureCredentialStorage, DpapiSecureCredentialStorage>();

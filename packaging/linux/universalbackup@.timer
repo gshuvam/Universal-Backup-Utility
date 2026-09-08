@@ -1,0 +1,11 @@
+[Unit]
+Description=Universal Backup Scheduled Timer for Plan %i
+Documentation=https://github.com/gshuvam/Universal-Backup-Utility
+
+[Timer]
+OnCalendar=daily
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target

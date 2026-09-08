@@ -1,13 +1,19 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
 using System.Runtime.InteropServices;
 using UniversalBackup.Application.Common.Interfaces;
 
-namespace UniversalBackup.Infrastructure.Restic;
+namespace UniversalBackup.Infrastructure.Platform;
 
-public class ResticBinaryResolver : IResticBinaryResolver
+/// <summary>
+/// Discovers and resolves the rclone cloud transport executable across bundled, local, and system paths.
+/// </summary>
+public class RcloneBinaryResolver : IRcloneBinaryResolver
 {
     private readonly string? _customPath;
 
-    public ResticBinaryResolver(string? customPath = null)
+    public RcloneBinaryResolver(string? customPath = null)
     {
         _customPath = customPath;
     }
@@ -34,7 +40,7 @@ public class ResticBinaryResolver : IResticBinaryResolver
         }
 
         var isWindows = RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
-        var binaryName = isWindows ? "restic.exe" : "restic";
+        var binaryName = isWindows ? "rclone.exe" : "rclone";
         var rid = isWindows ? "win-x64" : "linux-x64";
 
         // 2. Application BaseDirectory (flat bundled alongside executable)
@@ -51,7 +57,7 @@ public class ResticBinaryResolver : IResticBinaryResolver
             return Path.GetFullPath(runtimesPath);
         }
 
-        // 4. Known OS Directories
+        // 4. Known OS & Package Manager Directories
         var candidatePaths = new List<string>();
 
         if (isWindows)
@@ -59,21 +65,30 @@ public class ResticBinaryResolver : IResticBinaryResolver
             var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
             if (!string.IsNullOrWhiteSpace(localAppData))
             {
-                // Winget WindowsApps alias location
                 candidatePaths.Add(Path.Combine(localAppData, "Microsoft", "WindowsApps", binaryName));
+                candidatePaths.Add(Path.Combine(localAppData, "Programs", "rclone", binaryName));
             }
 
             var programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
             if (!string.IsNullOrWhiteSpace(programFiles))
             {
-                candidatePaths.Add(Path.Combine(programFiles, "restic", binaryName));
+                candidatePaths.Add(Path.Combine(programFiles, "rclone", binaryName));
             }
 
             var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
             if (!string.IsNullOrWhiteSpace(userProfile))
             {
                 candidatePaths.Add(Path.Combine(userProfile, "bin", binaryName));
-                candidatePaths.Add(Path.Combine(userProfile, ".restic", binaryName));
+                candidatePaths.Add(Path.Combine(userProfile, ".rclone", binaryName));
+                candidatePaths.Add(Path.Combine(userProfile, "scoop", "shims", binaryName));
+                candidatePaths.Add(Path.Combine(userProfile, "scoop", "apps", "rclone", "current", binaryName));
+            }
+
+            // Chocolatey standard path
+            var progData = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
+            if (!string.IsNullOrWhiteSpace(progData))
+            {
+                candidatePaths.Add(Path.Combine(progData, "chocolatey", "bin", binaryName));
             }
         }
         else
@@ -86,6 +101,7 @@ public class ResticBinaryResolver : IResticBinaryResolver
             }
             candidatePaths.Add(Path.Combine("/usr", "local", "bin", binaryName));
             candidatePaths.Add(Path.Combine("/usr", "bin", binaryName));
+            candidatePaths.Add(Path.Combine("/opt", "rclone", binaryName));
         }
 
         foreach (var candidate in candidatePaths)
@@ -96,7 +112,7 @@ public class ResticBinaryResolver : IResticBinaryResolver
             }
         }
 
-        // 4. System PATH resolution
+        // 5. System PATH resolution
         var pathEnv = Environment.GetEnvironmentVariable("PATH");
         if (!string.IsNullOrWhiteSpace(pathEnv))
         {
@@ -113,13 +129,12 @@ public class ResticBinaryResolver : IResticBinaryResolver
                 }
                 catch
                 {
-                    // Ignore invalid path syntax inside PATH variables
+                    // Ignore invalid paths in PATH environment
                 }
             }
         }
 
         throw new FileNotFoundException(
-            $"Restic binary '{binaryName}' was not found. Searched application directory, known OS locations, and system PATH.");
+            $"Rclone binary '{binaryName}' was not found. Searched application base directory, bundled runtimes, known OS locations, and system PATH.");
     }
 }
-

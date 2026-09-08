@@ -1,0 +1,39 @@
+app-id: org.universalbackup.UniversalBackup
+runtime: org.freedesktop.Platform
+runtime-version: '24.08'
+sdk: org.freedesktop.Sdk
+sdk-extensions:
+  - org.freedesktop.Sdk.Extension.dotnet10
+command: UniversalBackup.Desktop
+
+finish-args:
+  # Display & GPU
+  - --share=ipc
+  - --socket=x11
+  - --socket=wayland
+  - --device=dri
+  # Network for cloud OAuth and rclone replication
+  - --share=network
+  # Filesystem access for backup scanning and restoration
+  - --filesystem=host:ro
+  - --filesystem=home
+  - --filesystem=xdg-documents
+  - --filesystem=xdg-pictures
+  - --filesystem=/media
+  - --filesystem=/run/media
+  - --talk-name=org.freedesktop.Notifications
+  - --talk-name=org.freedesktop.secrets
+
+modules:
+  - name: universalbackup
+    buildsystem: simple
+    build-commands:
+      - install -Dm755 UniversalBackup.Desktop /app/bin/UniversalBackup.Desktop
+      - install -Dm755 UniversalBackup.Cli /app/bin/UniversalBackup.Cli
+      - install -Dm755 restic /app/bin/restic
+      - install -Dm755 rclone /app/bin/rclone
+      - install -Dm644 org.universalbackup.UniversalBackup.desktop /app/share/applications/org.universalbackup.UniversalBackup.desktop
+      - install -Dm644 org.universalbackup.UniversalBackup.svg /app/share/icons/hicolor/scalable/apps/org.universalbackup.UniversalBackup.svg
+    sources:
+      - type: dir
+        path: artifacts/publish/linux-x64

@@ -1,0 +1,24 @@
+[Desktop Entry]
+Version=1.5
+Type=Application
+Name=Universal Backup Utility
+GenericName=Backup & Disaster Recovery
+Comment=Encrypted, deduplicated personal and game backup utility with cloud replication
+Exec=UniversalBackup.Desktop %u
+Icon=org.universalbackup.UniversalBackup
+Terminal=false
+Categories=Utility;Archiving;System;Settings;
+Keywords=backup;restic;rclone;game;saves;cloud;replication;restore;disaster-recovery;
+StartupWMClass=UniversalBackup.Desktop
+MimeType=x-scheme-handler/universalbackup;
+PrefersNonDefaultGPU=false
+X-GNOME-UsesNotifications=true
+Actions=RunCLI;RebuildCatalog;
+
+[Desktop Action RunCLI]
+Name=Open Backup Terminal CLI
+Exec=x-terminal-emulator -e UniversalBackup.Cli --help
+
+[Desktop Action RebuildCatalog]
+Name=Rebuild Catalog From Repository
+Exec=UniversalBackup.Cli rebuild-catalog --help
