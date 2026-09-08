@@ -49,6 +49,7 @@ public sealed record BackupPlan
     public RetentionPolicy RetentionPolicy { get; init; }
     public FutureMatchPolicy FutureMatchPolicy { get; init; }
     public ConsistencyClass ConsistencyClass { get; init; }
+    public bool SuppressDuringGaming { get; init; }
     public DateTimeOffset CreatedAtUtc { get; init; }
     public DateTimeOffset ModifiedAtUtc { get; init; }
 
@@ -64,6 +65,7 @@ public sealed record BackupPlan
         BackupScheduleConfig? schedule = null,
         FutureMatchPolicy futureMatchPolicy = FutureMatchPolicy.AutoInclude,
         ConsistencyClass consistencyClass = ConsistencyClass.FilesystemSnapshot,
+        bool suppressDuringGaming = true,
         DateTimeOffset? createdAtUtc = null,
         DateTimeOffset? modifiedAtUtc = null)
     {
@@ -80,6 +82,7 @@ public sealed record BackupPlan
         Schedule = schedule;
         FutureMatchPolicy = futureMatchPolicy;
         ConsistencyClass = consistencyClass;
+        SuppressDuringGaming = suppressDuringGaming;
         CreatedAtUtc = createdAtUtc ?? DateTimeOffset.UtcNow;
         ModifiedAtUtc = modifiedAtUtc ?? DateTimeOffset.UtcNow;
     }

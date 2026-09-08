@@ -11,5 +11,6 @@ public enum BackupJobStatus
     CompleteWithOmissions,
     Incomplete,
     Failed,
-    Cancelled
+    Cancelled,
+    Postponed
 }

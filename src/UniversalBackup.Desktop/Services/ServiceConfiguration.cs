@@ -76,6 +76,8 @@ public static class ServiceConfiguration
         services.AddSingleton<ILegacyRestoreService, LegacyRestoreService>();
         services.AddSingleton<ILegacyMigrationService, LegacyMigrationService>();
         services.AddSingleton<IEmergencyRecoveryKitService, EmergencyRecoveryKitService>();
+        services.AddSingleton<IGameSessionDetector, GameSessionDetector>();
+        services.AddSingleton<IGameSessionSuppressionService, GameSessionSuppressionService>();
 
         // 5. Shell & Page ViewModels
         services.AddSingleton<MainViewModel>();

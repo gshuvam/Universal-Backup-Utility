@@ -401,6 +401,7 @@ public partial class BackupPlansViewModel : ViewModelBase
                 KeepMonthly: plan.KeepMonthlyCount > 0 ? plan.KeepMonthlyCount : 3),
             futureMatchPolicy: FutureMatchPolicy.AutoInclude,
             consistencyClass: plan.ConsistencyClass,
+            suppressDuringGaming: plan.SuppressDuringGaming,
             schedule: new BackupScheduleConfig(plan.CronExpression, plan.IsActive));
     }
 

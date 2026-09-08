@@ -77,6 +77,7 @@ public static class Program
         Console.WriteLine("Exit Codes:");
         Console.WriteLine("  0 = Success");
         Console.WriteLine("  1 = Fatal Failure / Invalid Command");
+        Console.WriteLine("  2 = Postponed (e.g. Active Gaming Session Detected)");
         Console.WriteLine("  3 = Completed with Omissions / Non-fatal warnings");
     }
 
@@ -85,6 +86,8 @@ public static class Program
         Guid? planId = null;
         string? planName = null;
         string? repoOverride = null;
+        bool suppressGaming = true;
+        bool force = false;
 
         for (int i = 0; i < args.Length; i++)
         {
@@ -102,6 +105,17 @@ public static class Program
             else if (args[i] is "--repo" or "-r" && i + 1 < args.Length)
             {
                 repoOverride = args[++i];
+            }
+            else if (args[i] is "--suppress-gaming" && i + 1 < args.Length)
+            {
+                if (bool.TryParse(args[++i], out var parsedSuppress))
+                {
+                    suppressGaming = parsedSuppress;
+                }
+            }
+            else if (args[i] is "--force" or "-f")
+            {
+                force = true;
             }
         }
 
@@ -122,6 +136,34 @@ public static class Program
         ICatalogService catalogService = new SqliteCatalogService(connectionFactory);
         await catalogService.InitializeCatalogAsync().ConfigureAwait(false);
 
+        string resolvedRepoPath = !string.IsNullOrWhiteSpace(repoOverride)
+            ? repoOverride
+            : Path.Combine(localAppData, "UniversalBackup", "repositories", "primary");
+
+        var plan = new BackupPlan(
+            id: planId ?? Guid.NewGuid(),
+            name: planName ?? "Scheduled Background Plan",
+            revision: 1,
+            preset: BackupPreset.GameSavesOnly,
+            destinationPolicy: new DestinationPolicy(resolvedRepoPath),
+            retentionPolicy: new RetentionPolicy(KeepLast: 7, KeepDaily: 7, KeepWeekly: 4),
+            suppressDuringGaming: suppressGaming);
+
+        if (!force && plan.SuppressDuringGaming)
+        {
+            IGameSessionDetector detector = new GameSessionDetector(catalogService);
+            IGameSessionSuppressionService suppressionService = new GameSessionSuppressionService(detector, catalogService);
+
+            var sessionStatus = await suppressionService.GetCurrentSessionStatusAsync().ConfigureAwait(false);
+            if (sessionStatus.IsGamingActive)
+            {
+                Console.WriteLine($"[POSTPONED] Active gaming session detected: {sessionStatus.Reason}");
+                Console.WriteLine("Postponing backup execution to prevent gameplay latency and file-locking conflicts.");
+                await suppressionService.RecordPostponedJobAsync(plan.Id, plan.Name, sessionStatus.Reason ?? "Active game detected").ConfigureAwait(false);
+                return 2;
+            }
+        }
+
         IResticEngine resticEngine = new ResticCliAdapter(new ResticBinaryResolver());
         IBackupDescriptorService descriptorService = new BackupDescriptorService();
         IBackupReceiptService receiptService = new BackupReceiptService();
@@ -134,20 +176,8 @@ public static class Program
             consistencyTracker,
             catalogService);
 
-        string resolvedRepoPath = !string.IsNullOrWhiteSpace(repoOverride)
-            ? repoOverride
-            : Path.Combine(localAppData, "UniversalBackup", "repositories", "primary");
-
         string stagingDir = Path.Combine(catalogDir, "staging");
         Directory.CreateDirectory(stagingDir);
-
-        var plan = new BackupPlan(
-            id: planId ?? Guid.NewGuid(),
-            name: planName ?? "Scheduled Background Plan",
-            revision: 1,
-            preset: BackupPreset.GameSavesOnly,
-            destinationPolicy: new DestinationPolicy(resolvedRepoPath),
-            retentionPolicy: new RetentionPolicy(KeepLast: 7, KeepDaily: 7, KeepWeekly: 4));
 
         Console.WriteLine($"[INFO] Target Repository: {resolvedRepoPath}");
         Console.WriteLine("[INFO] Commencing Dual-Snapshot Commit Protocol...");
