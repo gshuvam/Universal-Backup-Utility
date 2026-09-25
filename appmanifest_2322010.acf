@@ -1,0 +1,49 @@
+"AppState"
+{
+	"appid"		"2322010"
+	"universe"		"1"
+	"LauncherPath"		"C:\\Program Files (x86)\\Steam\\steam.exe"
+	"name"		"God of War Ragnarök"
+	"StateFlags"		"4"
+	"installdir"		"God of War Ragnarok"
+	"LastUpdated"		"1786485530"
+	"LastPlayed"		"1790359266"
+	"SizeOnDisk"		"188864554983"
+	"StagingSize"		"0"
+	"buildid"		"18979360"
+	"LastOwner"		"76561198658394391"
+	"DownloadType"		"1"
+	"UpdateResult"		"0"
+	"BytesToDownload"		"107627197504"
+	"BytesDownloaded"		"107627197504"
+	"BytesToStage"		"188864554983"
+	"BytesStaged"		"188864554983"
+	"TargetBuildID"		"18979360"
+	"AutoUpdateBehavior"		"0"
+	"AllowOtherDownloadsWhileRunning"		"0"
+	"ScheduledAutoUpdate"		"0"
+	"InstalledDepots"
+	{
+		"2322011"
+		{
+			"manifest"		"151255971557114067"
+			"size"		"188864554983"
+		}
+	}
+	"InstallScripts"
+	{
+		"2322011"		"installscript.vdf"
+	}
+	"SharedDepots"
+	{
+		"228989"		"228980"
+	}
+	"UserConfig"
+	{
+		"language"		"english"
+	}
+	"MountedConfig"
+	{
+		"language"		"english"
+	}
+}

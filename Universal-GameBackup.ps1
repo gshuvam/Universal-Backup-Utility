@@ -35,7 +35,8 @@ param(
     # Automatically defaults to D:\GameBackups if D: exists, another secondary drive, or C:\GameBackups.
     [string]$Destination = "",
 
-    # RESTORE: exact backup-set folder containing manifest.json.
+    # RESTORE: exact backup-set folder containing manifest.json, or parent folder containing backups.
+    [Alias("BackupSetPath", "Path")]
     [string]$BackupPath = "",
 
     # Backup scope options:
@@ -113,6 +114,94 @@ function Get-DefaultBackupDestination {
     }
 
     return "C:\GameBackups"
+}
+
+function Find-BackupSets {
+    param(
+        [string]$SearchPath = ""
+    )
+
+    $results = New-Object System.Collections.Generic.List[object]
+    $seenPaths = @{}
+    $searchDirs = New-Object System.Collections.Generic.List[string]
+
+    if (-not [string]::IsNullOrWhiteSpace($SearchPath)) {
+        $norm = Normalize-Path $SearchPath
+        if ($norm -and (Test-Path -LiteralPath $norm)) {
+            # Check if this directory directly contains manifest.json
+            $directManifest = [System.IO.Path]::Combine($norm, "manifest.json")
+            if (Test-Path -LiteralPath $directManifest) {
+                try {
+                    $m = Get-Content -LiteralPath $directManifest -Raw -ErrorAction Stop | ConvertFrom-Json
+                    $results.Add([pscustomobject]@{
+                        Path         = $norm
+                        Name         = (Split-Path -Leaf $norm)
+                        Created      = if ($m.PSObject.Properties['CreatedUtc']) { $m.CreatedUtc } else { (Get-Item -LiteralPath $norm).CreationTime.ToString("yyyy-MM-dd HH:mm:ss") }
+                        Scope        = if ($m.PSObject.Properties['Scope']) { $m.Scope } else { "Full" }
+                        Coverage     = if ($m.PSObject.Properties['UserDataCoverage']) { $m.UserDataCoverage } else { "Standard" }
+                        ComputerName = if ($m.PSObject.Properties['ComputerName']) { $m.ComputerName } else { "Unknown" }
+                        UserName     = if ($m.PSObject.Properties['UserName']) { $m.UserName } else { "Unknown" }
+                        EntriesCount = if ($m.PSObject.Properties['Entries']) { @($m.Entries).Count } else { 0 }
+                        FolderDate   = (Get-Item -LiteralPath $norm).CreationTime
+                    })
+                    return @($results)
+                }
+                catch {}
+            }
+            $searchDirs.Add($norm)
+        }
+    }
+
+    # Add default backup folder
+    $defaultDest = Get-DefaultBackupDestination
+    if ($defaultDest -and -not $searchDirs.Contains($defaultDest)) {
+        $searchDirs.Add($defaultDest)
+    }
+
+    # Add \GameBackups for all available system drives
+    try {
+        Get-PSDrive -PSProvider FileSystem | Where-Object { $_.Name -match '^[A-Za-z]$' } | ForEach-Object {
+            $candidate = "$($_.Name):\GameBackups"
+            if ((Test-Path -LiteralPath $candidate) -and -not $searchDirs.Contains($candidate)) {
+                $searchDirs.Add($candidate)
+            }
+        }
+    }
+    catch {}
+
+    foreach ($dir in $searchDirs) {
+        if (-not (Test-Path -LiteralPath $dir)) { continue }
+
+        $subDirs = Get-ChildItem -LiteralPath $dir -Directory -ErrorAction SilentlyContinue
+        if ($null -eq $subDirs) { continue }
+
+        foreach ($sub in $subDirs) {
+            $manifestFile = [System.IO.Path]::Combine($sub.FullName, "manifest.json")
+            if (Test-Path -LiteralPath $manifestFile) {
+                $lowerKey = $sub.FullName.ToLowerInvariant()
+                if ($seenPaths.ContainsKey($lowerKey)) { continue }
+                $seenPaths[$lowerKey] = $true
+
+                try {
+                    $m = Get-Content -LiteralPath $manifestFile -Raw -ErrorAction Stop | ConvertFrom-Json
+                    $results.Add([pscustomobject]@{
+                        Path         = $sub.FullName
+                        Name         = $sub.Name
+                        Created      = if ($m.PSObject.Properties['CreatedUtc']) { $m.CreatedUtc } else { $sub.CreationTime.ToString("yyyy-MM-dd HH:mm:ss") }
+                        Scope        = if ($m.PSObject.Properties['Scope']) { $m.Scope } else { "Full" }
+                        Coverage     = if ($m.PSObject.Properties['UserDataCoverage']) { $m.UserDataCoverage } else { "Standard" }
+                        ComputerName = if ($m.PSObject.Properties['ComputerName']) { $m.ComputerName } else { "Unknown" }
+                        UserName     = if ($m.PSObject.Properties['UserName']) { $m.UserName } else { "Unknown" }
+                        EntriesCount = if ($m.PSObject.Properties['Entries']) { @($m.Entries).Count } else { 0 }
+                        FolderDate   = $sub.CreationTime
+                    })
+                }
+                catch {}
+            }
+        }
+    }
+
+    return @($results | Sort-Object { if ($_.PSObject.Properties['FolderDate']) { $_.FolderDate } else { [datetime]::MinValue } } -Descending)
 }
 
 function Get-BackupRelativePath {
@@ -232,17 +321,31 @@ function Parse-DriveMap {
 function Apply-DriveMap {
     param(
         [string]$OriginalPath,
-        [hashtable]$Map
+        [hashtable]$Map,
+        [string]$ManifestUserName = ""
     )
 
-    if ($OriginalPath -match '^([A-Za-z]):\\') {
+    $targetPath = $OriginalPath
+
+    # Remap user profile folder if username differs between backup and restore machine
+    if (-not [string]::IsNullOrWhiteSpace($ManifestUserName) -and
+        $ManifestUserName -match '^[A-Za-z0-9_\.\-]+$' -and
+        $ManifestUserName -ine $env:USERNAME) {
+        
+        $oldUserPattern = "(?i)^([A-Za-z]:\\Users\\)" + [regex]::Escape($ManifestUserName) + "(\\.*)$"
+        if ($targetPath -match $oldUserPattern) {
+            $targetPath = "$env:USERPROFILE$($matches[2])"
+        }
+    }
+
+    if ($targetPath -match '^([A-Za-z]):\\') {
         $old = $matches[1].ToUpper()
         if ($Map.ContainsKey($old)) {
             $new = $Map[$old]
-            return ($new + $OriginalPath.Substring(1))
+            return ($new + $targetPath.Substring(1))
         }
     }
-    return $OriginalPath
+    return $targetPath
 }
 
 function Get-UserShellFolder {
