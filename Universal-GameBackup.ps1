@@ -784,7 +784,31 @@ function Invoke-Backup {
 
 function Invoke-Restore {
     if ([string]::IsNullOrWhiteSpace($BackupPath)) {
-        throw "Restore requires -BackupPath pointing to a GameBackup_YYYYMMDD_HHMMSS folder."
+        # Try automatic discovery
+        $available = Find-BackupSets
+        if ($available.Count -eq 1) {
+            $BackupPath = $available[0].Path
+            Write-Host "Automatically selected backup set: $BackupPath" -ForegroundColor Cyan
+        }
+        elseif ($available.Count -gt 1) {
+            Write-Host ""
+            Write-Host "Multiple backup sets found. Select which one to restore:" -ForegroundColor Yellow
+            for ($k = 0; $k -lt $available.Count; $k++) {
+                $b = $available[$k]
+                Write-Host "  [$($k + 1)] $($b.Name) (Created: $($b.Created) | Scope: $($b.Scope) | Items: $($b.EntriesCount))"
+            }
+            $pick = Read-Host "Select backup [1-$($available.Count)] (default: 1)"
+            $idx = 0
+            if (-not [string]::IsNullOrWhiteSpace($pick) -and [int]::TryParse($pick.Trim(), [ref]$idx) -and $idx -ge 1 -and $idx -le $available.Count) {
+                $BackupPath = $available[$idx - 1].Path
+            }
+            else {
+                $BackupPath = $available[0].Path
+            }
+        }
+        else {
+            throw "Restore requires -BackupPath pointing to a backup set folder containing manifest.json."
+        }
     }
 
     $setPath = Normalize-Path $BackupPath
@@ -792,27 +816,56 @@ function Invoke-Restore {
         throw "Backup path is invalid or empty."
     }
 
+    $manifestPath = [System.IO.Path]::Combine($setPath, "manifest.json")
+
+    # If manifest.json is not directly in the specified path, check if it's a parent folder containing backup sets
+    if (-not (Test-Path -LiteralPath $manifestPath)) {
+        $found = Find-BackupSets -SearchPath $setPath
+        if ($found.Count -eq 1) {
+            Write-Host "Detected backup set in '$setPath': $($found[0].Name)" -ForegroundColor Cyan
+            $setPath = $found[0].Path
+            $manifestPath = [System.IO.Path]::Combine($setPath, "manifest.json")
+        }
+        elseif ($found.Count -gt 1) {
+            Write-Host ""
+            Write-Host "Multiple backup sets found in '$setPath':" -ForegroundColor Yellow
+            for ($k = 0; $k -lt $found.Count; $k++) {
+                $b = $found[$k]
+                Write-Host "  [$($k + 1)] $($b.Name)  (Date: $($b.Created) | Scope: $($b.Scope) | Items: $($b.EntriesCount))"
+            }
+            $pick = Read-Host "Select backup to restore [1-$($found.Count)] (default: 1)"
+            $idx = 0
+            if (-not [string]::IsNullOrWhiteSpace($pick) -and [int]::TryParse($pick.Trim(), [ref]$idx) -and $idx -ge 1 -and $idx -le $found.Count) {
+                $setPath = $found[$idx - 1].Path
+            }
+            else {
+                $setPath = $found[0].Path
+            }
+            $manifestPath = [System.IO.Path]::Combine($setPath, "manifest.json")
+            Write-Host "Selected backup set: $setPath" -ForegroundColor Cyan
+        }
+        else {
+            throw "manifest.json not found in '$setPath' or any of its subfolders. Please specify a folder that contains manifest.json."
+        }
+    }
+
     $driveRoot = [System.IO.Path]::GetPathRoot($setPath)
     if (-not [string]::IsNullOrWhiteSpace($driveRoot) -and -not (Test-Path -LiteralPath $driveRoot)) {
         throw "Backup path drive '$driveRoot' does not exist."
     }
 
-    $manifestPath = [System.IO.Path]::Combine($setPath, "manifest.json")
-
-    if (-not (Test-Path -LiteralPath $manifestPath)) {
-        throw "manifest.json not found in: $setPath"
-    }
-
     $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
     $map = Parse-DriveMap $DriveMap
 
-    Write-Section "Restore plan"
+    Write-Section "Restore Plan"
 
+    Write-Host "Backup folder  : $setPath" -ForegroundColor White
     Write-Host "Backup created : $($manifest.CreatedUtc)"
     Write-Host "Original PC    : $($manifest.ComputerName)"
     Write-Host "Original user  : $($manifest.UserName)"
     Write-Host "Scope          : $($manifest.Scope)"
     Write-Host "Coverage       : $($manifest.UserDataCoverage)"
+    Write-Host "Total items    : $(@($manifest.Entries).Count)"
 
     if ($map.Count -gt 0) {
         Write-Host "Drive mappings :" -ForegroundColor Yellow
@@ -833,13 +886,65 @@ function Invoke-Restore {
             if ($t -and $priority.ContainsKey($t)) { $priority[$t] } else { 99 }
         })
 
+    # Check for missing target drives across all entries
+    $currentDrives = @(Get-PSDrive -PSProvider FileSystem | Where-Object { $_.Name -match '^[A-Za-z]$' } | Select-Object -ExpandProperty Name)
+    $missingDrives = @{}
+
+    foreach ($entry in $entries) {
+        $testDst = Apply-DriveMap -OriginalPath ([string]$entry.Source) -Map $map -ManifestUserName ([string]$manifest.UserName)
+        if ($testDst -match '^([A-Za-z]):\\') {
+            $drv = $matches[1].ToUpper()
+            if ($currentDrives -notcontains $drv -and -not $map.ContainsKey($drv)) {
+                $missingDrives[$drv] = $true
+            }
+        }
+    }
+
+    if ($missingDrives.Count -gt 0) {
+        $missingList = ($missingDrives.Keys | Sort-Object) -join ", "
+        $fallbackDrive = if ($currentDrives -contains "C") { "C" } else { $currentDrives[0] }
+        Write-Warning "The backup contains files originally on drive(s): $missingList, which do not exist on this machine."
+
+        $autoRemap = $false
+        if ($Force) {
+            $autoRemap = $true
+        }
+        else {
+            Write-Host "Would you like to automatically remap missing drive(s) to '$fallbackDrive`:'? [Y/n]" -ForegroundColor Yellow
+            $remapChoice = Read-Host
+            if ($remapChoice -notmatch '^[Nn]') {
+                $autoRemap = $true
+            }
+        }
+
+        if ($autoRemap) {
+            foreach ($md in $missingDrives.Keys) {
+                $map[$md] = $fallbackDrive
+                Write-Host "Drive mapped: $md`: -> $fallbackDrive`:" -ForegroundColor Green
+            }
+        }
+        else {
+            Write-Warning "Unmapped files targeting missing drives will be skipped. Use -DriveMap (e.g. -DriveMap D=$fallbackDrive) to map them."
+        }
+    }
+
+    # Safety confirmation before restoring files
+    if (-not $Force -and -not $DryRun) {
+        Write-Host ""
+        $confirm = Read-Host "Ready to restore $(@($entries).Count) items to this system. Proceed? [Y/n]"
+        if ($confirm -match '^[Nn]') {
+            Write-Host "Restore cancelled by user." -ForegroundColor Yellow
+            return
+        }
+    }
+
     $i = 0
     $ok = 0
 
     foreach ($entry in $entries) {
         $i++
         $src = [System.IO.Path]::Combine($setPath, $entry.BackupRelative)
-        $dst = Apply-DriveMap -OriginalPath ([string]$entry.Source) -Map $map
+        $dst = Apply-DriveMap -OriginalPath ([string]$entry.Source) -Map $map -ManifestUserName ([string]$manifest.UserName)
 
         Write-Progress -Activity "Game restore" -Status "$i / $($entries.Count): $($entry.Description)" -PercentComplete (($i / $entries.Count) * 100)
 
@@ -850,9 +955,10 @@ function Invoke-Restore {
 
         # If the target drive does not exist, skip instead of writing somewhere unexpected.
         if ($dst -match '^([A-Za-z]):\\') {
-            $driveRoot = "$($matches[1]):\"
-            if (-not (Test-Path -LiteralPath $driveRoot)) {
-                Write-Warning "Target drive does not exist for '$dst'. Use -DriveMap OLD=NEW."
+            $targetDriveRoot = "$($matches[1]):\"
+            if (-not (Test-Path -LiteralPath $targetDriveRoot)) {
+                $availableDrives = ($currentDrives | ForEach-Object { "$($_):\" }) -join ", "
+                Write-Warning "Target drive '$targetDriveRoot' does not exist for '$dst'. (Available drives: $availableDrives). Use -DriveMap $($matches[1])=C to redirect."
                 continue
             }
         }
@@ -936,12 +1042,50 @@ if ($Mode -eq "Backup") {
 elseif ($Mode -eq "Restore") {
     if ([string]::IsNullOrWhiteSpace($BackupPath)) {
         Write-Host ""
-        Write-Host "Enter the path to the backup set folder containing manifest.json" -ForegroundColor Yellow
-        $BackupPath = Read-Host "Backup Set Path"
+        Write-Host "Scanning for available backup sets..." -ForegroundColor DarkGray
+        $availableBackups = Find-BackupSets
+
+        if ($availableBackups.Count -gt 0) {
+            Write-Host ""
+            Write-Host "Available Backups Found:" -ForegroundColor Yellow
+            for ($k = 0; $k -lt $availableBackups.Count; $k++) {
+                $b = $availableBackups[$k]
+                Write-Host "  [$($k + 1)] $($b.Name)" -ForegroundColor Green
+                Write-Host "      Location: $($b.Path)" -ForegroundColor DarkGray
+                Write-Host "      Created:  $($b.Created) | Scope: $($b.Scope) | Coverage: $($b.Coverage) | Items: $($b.EntriesCount)" -ForegroundColor DarkGray
+                Write-Host "      Origin:   $($b.ComputerName) (User: $($b.UserName))" -ForegroundColor DarkGray
+            }
+            Write-Host "  [C] Custom Path - Enter a different backup folder path"
+            
+            $restoreChoice = Read-Host "Select backup to restore [1-$($availableBackups.Count)] or enter 'C' (default: 1)"
+            if ($restoreChoice.Trim() -ieq "C") {
+                $BackupPath = Read-Host "Enter custom backup set path"
+            }
+            else {
+                $idx = 0
+                if (-not [string]::IsNullOrWhiteSpace($restoreChoice) -and [int]::TryParse($restoreChoice.Trim(), [ref]$idx) -and $idx -ge 1 -and $idx -le $availableBackups.Count) {
+                    $BackupPath = $availableBackups[$idx - 1].Path
+                }
+                else {
+                    $BackupPath = $availableBackups[0].Path
+                }
+            }
+        }
+        else {
+            Write-Host ""
+            Write-Host "No backup sets automatically detected in default locations." -ForegroundColor Yellow
+            Write-Host "Enter the path to the backup set folder containing manifest.json (or parent folder):" -ForegroundColor Yellow
+            $BackupPath = Read-Host "Backup Set Path"
+        }
     }
 }
 
-Write-Host "Mode: $Mode | Scope: $Scope | User-data coverage: $UserDataCoverage"
+if ($Mode -eq "Backup") {
+    Write-Host "Mode: Backup | Scope: $Scope | User-data coverage: $UserDataCoverage"
+}
+else {
+    Write-Host "Mode: Restore | Backup Path: $BackupPath"
+}
 
 if (-not (Test-Administrator)) {
     Write-Warning "PowerShell is not running as Administrator. Backup may work, but Restore into protected folders can fail."
